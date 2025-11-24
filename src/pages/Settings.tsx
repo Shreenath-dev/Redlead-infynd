@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-// Icons used across all sections
 import {
   User, Briefcase, Mail, Cpu, Sliders, Code, Database, Settings as SettingsIcon,
   Phone, Server, Zap, Link, CheckCircle, XCircle, Key, ExternalLink,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
-// Mocking Supabase and Toast hooks as they are custom imports
 const supabase = {
   from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: { name: 'Akash K', role: 'Marketing Lead' }, error: null }) }) }), update: () => ({ eq: async () => ({ error: null }) }) })
 };
@@ -464,7 +462,6 @@ export default function Settings() {
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('profile'); 
     const [profile, setProfile] = useState({
-        // State fields for all forms
         name: '',
         company_name: '',
         website_url: '',

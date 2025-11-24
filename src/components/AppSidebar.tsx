@@ -29,7 +29,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Calendar, Zap, TrendingUp } from "lucide-react";
 import inLogo from "../../public/in.png";
 import infyndLogo from "../../public/infynd.svg";
@@ -57,6 +57,32 @@ export function AppSidebar() {
   const { user, signOut } = useAuth();
 
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const handleDocClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node | null;
+      if (profileRef.current && target && !profileRef.current.contains(target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileOpen(false);
+    };
+
+    document.addEventListener("mousedown", handleDocClick);
+    document.addEventListener("touchstart", handleDocClick);
+    document.addEventListener("keydown", handleKey);
+
+    return () => {
+      document.removeEventListener("mousedown", handleDocClick);
+      document.removeEventListener("touchstart", handleDocClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [profileOpen]);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -256,11 +282,11 @@ export function AppSidebar() {
               <SidebarGroupContent>
                 {/* REVISION: Adjusted padding (px-2 py-2) and width (w-10) for centering the avatar when collapsed (w-14) */}
                 <div
+                  ref={profileRef}
                   className={`flex items-center gap-3 px-2 py-2 cursor-pointer group relative hover:bg-sidebar-accent rounded-md ${
                     !open ? "justify-center" : "" // Center content when sidebar is collapsed
                   }`}
                   onClick={() => setProfileOpen(!profileOpen)}
-                  onBlur={() => setProfileOpen(false)}
                   tabIndex={0}
                 >
                   <Avatar className="h-8 w-8">
@@ -276,7 +302,7 @@ export function AppSidebar() {
                     </div>
                   )}
 
-                  {open && profileOpen && (
+                  {profileOpen && (
                     <div className="absolute bottom-full mb-2 right-0 bg-white shadow-lg rounded-md w-48 z-20 ring-1 ring-black ring-opacity-5">
                       <NavLink
                         to="/settings"
