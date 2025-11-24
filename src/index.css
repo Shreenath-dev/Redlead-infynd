@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* RedLead brand colors */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Primary red brand color */
+    --primary: 356 76% 60%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 356 76% 55%;
+
+    /* Secondary gray tones */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 20%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 356 76% 95%;
+    --accent-foreground: 356 76% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 92%;
+    --input: 0 0% 92%;
+    --ring: 356 76% 60%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar styling */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 40%;
+    --sidebar-primary: 356 76% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 356 76% 95%;
+    --sidebar-accent-foreground: 356 76% 40%;
+    --sidebar-border: 0 0% 92%;
+    --sidebar-ring: 356 76% 60%;
+
+    /* Additional brand tokens */
+    --text-primary: 0 0% 10%;
+    --text-secondary: 0 0% 40%;
+    --divider: 0 0% 92%;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+}
+/* Must be in a global CSS file for cross-browser scrollbar styling */
+
+.custom-scrollbar-red::-webkit-scrollbar {
+    width: 6px; /* Defines the thickness of the vertical scrollbar */
+}
+
+.custom-scrollbar-red::-webkit-scrollbar-track {
+    background: transparent; 
+}
+
+.custom-scrollbar-red::-webkit-scrollbar-thumb {
+    background: #ef4444; /* Red color (Tailwind red-500) */
+    border-radius: 10px;
+}
+
+.custom-scrollbar-red::-webkit-scrollbar-thumb:hover {
+    background: #dc2626; /* Darker red on hover */
+}
+
+/* Firefox compatibility */
+.custom-scrollbar-grey {
+    scrollbar-width: thin; 
+    scrollbar-color: #696262 transparent; 
+}
+
+.custom-scrollbar-grey::-webkit-scrollbar {
+    width: 6px; /* Defines the thickness of the vertical scrollbar */
+}
+
+.custom-scrollbar-grey::-webkit-scrollbar-track {
+    background: transparent; 
+}
+
+.custom-scrollbar-grey::-webkit-scrollbar-thumb {
+    background: #696262; /* Red color (Tailwind red-500) */
+    border-radius: 10px;
+}
+
+.custom-scrollbar-grey::-webkit-scrollbar-thumb:hover {
+    background: #696262; /* Darker red on hover */
+}
+
+/* Firefox compatibility */
+.custom-scrollbar-grey {
+    scrollbar-width: thin; 
+    scrollbar-color: #696262 transparent; 
+}
+
+/* Custom CSS for hidden scrollbar that appears on hover */
+
+/* Target the container element */
+.scroll-on-hover {
+  overflow-y: scroll; /* Enable scrolling */
+}
+
+/* Hide the scrollbar by default (Webkit browsers: Chrome, Safari, Edge) */
+.scroll-on-hover::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background-color: transparent; /* Make the background invisible */
+}
+
+/* Track/Background (Make it transparent/hidden) */
+.scroll-on-hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Handle (Make it transparent/invisible by default) */
+.scroll-on-hover::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 4px;
+}
+
+/* Show the scrollbar handle when the container is hovered */
+.scroll-on-hover:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2); /* Show a subtle grey handle on hover */
+}
+
+/* Fallback for Firefox (less control over scrollbar appearance, but hides the track) */
+.scroll-on-hover {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Hide scrollbar completely if needed, but still allow scrolling */
+/* .scroll-on-hover {
+  -ms-overflow-style: none;
+} */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Ensure the root elements take full viewport height so flex/min-h-* utilities
+     and internal overflow behave predictably across browsers. */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
