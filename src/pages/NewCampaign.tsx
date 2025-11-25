@@ -2,13 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 
 import { GoogleGenAI } from "@google/genai";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +14,6 @@ import {
   Mic,
   Send,
   Paperclip,
-  Target,
   Users,
   TrendingUp,
   Edit,
@@ -31,9 +24,10 @@ import {
   Loader2,
   Plus,
   Database,
-  AlertCircle,
   Check,
   Sparkles,
+  ChevronDown,
+  X,
 } from "lucide-react";
 
 // --- CONFIGURATION ---
@@ -70,12 +64,15 @@ const CAMPAIGN_TYPES = [
   },
 ];
 
+// --- UPDATED: Available emails (used for the dropdown)
 const AVAILABLE_EMAILS = [
   { id: "1", email: "shreenath.py@gmail.com", provider: "Google" },
 
   { id: "2", email: "sales@infynd.com", provider: "Outlook" },
 
   { id: "3", email: "outreach@infynd.com", provider: "SMTP" },
+
+  { id: "4", email: "info@infynd.com", provider: "Google" },
 ];
 
 const DUMMY_LEADS = [
@@ -101,115 +98,219 @@ const DUMMY_LEADS = [
   },
 ];
 
-const MAGIC_PROMPT_TEMPLATE = `I want to launch a campaign targeting [Target Role] in [Industry] for [Location]. My goal is to generate [100] leads/month with the objective of [Booking Meetings]. My website is [Your URL]. Leads are currently stored in [CSV/Salesforce]. Please create a 5-step sequence using Email, Phone & LinkedIn, sending from [Your Email Address].`;
+// --- TOKENIZED INPUT CONSTANTS ---
+const PROMPT_TOKENS = [
+  {
+    key: "targetRole",
+    placeholder: "[Target Role]",
+    label: "Target Role",
+    value: null,
+  },
+  {
+    key: "industry",
+    placeholder: "[Industry]",
+    label: "Industry",
+    value: null,
+  },
+  {
+    key: "location",
+    placeholder: "[Location]",
+    label: "Location",
+    value: null,
+  },
+  { key: "goal", placeholder: "[100] leads/month", label: "Goal", value: null },
+  {
+    key: "objective",
+    placeholder: "[Booking Meetings]",
+    label: "Objective",
+    value: null,
+  },
+  { key: "url", placeholder: "[Your URL]", label: "Website", value: null },
+  {
+    key: "dataSource",
+    placeholder: "[CSV/Salesforce]",
+    label: "Data Source",
+    value: null,
+  },
+  {
+    key: "email",
+    placeholder: "[Select Emails]",
+    label: "Sender Email",
+    value: null,
+  }, // Value will be a comma-separated string
+];
 
+const MAGIC_PROMPT_TEMPLATE_V2 = `I want to launch a campaign targeting {targetRole} in {industry} for {location}. My goal is to generate {goal} with the objective of {objective}. My website is {url}. Leads are currently stored in {dataSource}. Please create a 5-step sequence using Email, Phone & LinkedIn, sending from {email}.`;
+
+// --- CAMPAIGN SCHEMA (Simplified for display) ---
 const CAMPAIGN_SCHEMA = {
   type: "object",
-
   properties: {
     ai_response: { type: "string", description: "Concise 1-2 line response." },
-
     suggested_actions: { type: "array", items: { type: "string" } },
-
     icp: {
       type: "object",
-
       properties: {
         role: { type: "string" },
-
         industry: { type: "string" },
-
         location: { type: "string" },
-
         goal: { type: "string" },
-
         objective: { type: "string" },
       },
     },
-
     company: {
       type: "object",
-
       properties: {
         url: { type: "string" },
-
         value_prop: { type: "string" },
-
         pain_points: { type: "string" },
       },
     },
-
     data_source: {
       type: "object",
-
       properties: {
         source_type: { type: "string" },
-
         status: { type: "string" },
       },
     },
-
     cadence: {
       type: "object",
-
-      properties: {
-        channels: { type: "string" },
-
-        steps: { type: "string" },
-      },
+      properties: { channels: { type: "string" }, steps: { type: "string" } },
     },
-
     mailbox_selection: {
       type: "array",
-
       items: { type: "string" },
-
       description: "List of emails user mentioned to use",
     },
-
     launch_ready: { type: "boolean" },
   },
-
   required: ["ai_response", "suggested_actions"],
 };
 
+// --- MAILBOX PICKER OVERLAY COMPONENT ---
+const MailboxPickerOverlay = ({
+  isOpen,
+  onClose,
+  onSave,
+  initialSelection,
+}) => {
+  // initialSelection is an array of email strings
+  const [selectedEmails, setSelectedEmails] = useState(initialSelection);
+
+  useEffect(() => {
+    setSelectedEmails(initialSelection);
+  }, [initialSelection]);
+
+  if (!isOpen) return null;
+
+  const toggleEmail = (email) => {
+    setSelectedEmails((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
+  };
+
+  const handleSave = () => {
+    onSave(selectedEmails);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center backdrop-blur-sm">
+      <Card className="w-full max-w-md bg-white p-6 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-5">
+        <CardHeader className="flex flex-row items-center justify-between p-0 mb-4">
+          <CardTitle className="text-xl font-bold">
+            Select Sender Mailboxes
+          </CardTitle>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="rounded-full"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0 space-y-3 max-h-80 overflow-y-auto custom-scrollbar-red-600">
+          {AVAILABLE_EMAILS.map((mail) => (
+            <div
+              key={mail.id}
+              className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors
+                                ${
+                                  selectedEmails.includes(mail.email)
+                                    ? "bg-red-50 border-red-200"
+                                    : "bg-white border-gray-100 hover:bg-gray-50"
+                                }`}
+              onClick={() => toggleEmail(mail.email)}
+            >
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  checked={selectedEmails.includes(mail.email)}
+                  // Read-only click handler to allow div click to function
+                  onCheckedChange={() => {}}
+                  className="data-[state=checked]:bg-[#e63946] data-[state=checked]:border-[#e63946]"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {mail.email}
+                  </p>
+                  <span className="text-xs text-gray-400">{mail.provider}</span>
+                </div>
+              </div>
+              {selectedEmails.includes(mail.email) && (
+                <CheckCircle className="h-4 w-4 text-[#e63946]" />
+              )}
+            </div>
+          ))}
+        </CardContent>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            className="bg-green-600 hover:bg-green-700"
+            disabled={selectedEmails.length === 0}
+          >
+            Save Selection ({selectedEmails.length})
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// --- CAMPAIGN BUILDER COMPONENT ---
 export default function CampaignBuilder() {
   const [view, setView] = useState("initial");
-
   const [chat, setChat] = useState([
     {
       role: "ai",
       text: "Hello! I'm your AI campaign architect. Select a goal or describe your campaign to start.",
     },
   ]);
-
   const [input, setInput] = useState("");
-
   const [isLoading, setIsLoading] = useState(false);
-
   const [editor, setEditor] = useState({
     icp: {},
-
     calculations: { required: 0, uploaded: 0 },
-
     company: {},
-
     dataSource: {},
-
     cadence: {},
-
     mailbox: { selected: [] },
-
     launch: { status: "Draft" },
   });
-
   const [dynamicQuickActions, setDynamicQuickActions] = useState([]);
-
   const editorRef = useRef(editor);
-
   const chatEndRef = useRef(null);
-
   const fileInputRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // --- NEW STATES FOR TOKENIZED INPUT ---
+  const [promptTokens, setPromptTokens] = useState(PROMPT_TOKENS);
+  const [tokenizedMode, setTokenizedMode] = useState(false);
+  const [editingTokenKey, setEditingTokenKey] = useState(PROMPT_TOKENS[0].key);
+  // NEW: State for the Mailbox Picker
+  const [isMailboxPickerOpen, setIsMailboxPickerOpen] = useState(false);
+  // ---------------------------------------
 
   useEffect(() => {
     editorRef.current = editor;
@@ -221,14 +322,27 @@ export default function CampaignBuilder() {
 
   const calculateNeeds = (goalStr) => {
     const match = String(goalStr).match(/(\d+)/);
-
     const goal = match ? parseInt(match[1], 10) : 0;
-
     return Math.ceil(goal / 0.01);
   };
 
+  const compileMagicPrompt = (tokens = promptTokens) => {
+    let compiled = MAGIC_PROMPT_TEMPLATE_V2;
+    tokens.forEach((t) => {
+      const value = t.value || t.placeholder;
+      compiled = compiled.replace(`{${t.key}}`, value);
+    });
+    return compiled;
+  };
+
+  const areAllTokensFilled = useMemo(() => {
+    return promptTokens.every((t) => t.value !== null);
+  }, [promptTokens]);
+
   const processMessage = async (userText) => {
     setIsLoading(true);
+
+    if (view === "initial") setView("dual");
 
     const context = {
       ...editorRef.current,
@@ -246,7 +360,7 @@ export default function CampaignBuilder() {
 
       **Current State:** ${JSON.stringify(context)}
 
-
+      
 
       **STRICT WORKFLOW:**
 
@@ -256,13 +370,13 @@ export default function CampaignBuilder() {
 
       3. **Data Source:** Ask for source (CSV/CRM). 
 
-         - If they upload a source, assume "Uploaded" = 1500.
+          - If they upload a source, assume "Uploaded" = 1500.
 
-         - COMPARE: If Uploaded < Required (${
-           editorRef.current.calculations.required
-         }), WARN the user.
+          - COMPARE: If Uploaded < Required (${
+            editorRef.current.calculations.required
+          }), WARN the user.
 
-         - If Uploaded >= Required, suggest Touchpoints.
+          - If Uploaded >= Required, suggest Touchpoints.
 
       4. **Touchpoints & Cadence:** Suggest channels first, then generate steps.
 
@@ -289,13 +403,7 @@ export default function CampaignBuilder() {
 
       history: [
         { role: "user", parts: [{ text: prompt }] },
-
-        ...chat
-          .slice(1)
-          .map((m) => ({
-            role: m.role === "ai" ? "model" : "user",
-            parts: [{ text: m.text }],
-          })),
+        { role: "user", parts: [{ text: userText }] },
       ],
     });
 
@@ -441,12 +549,12 @@ export default function CampaignBuilder() {
     setDynamicQuickActions(nextActions);
   };
 
-  const sendMessage = (text) => {
+  const sendMessage = (text, userTextOverride = text) => {
     if (!text.trim()) return;
 
     if (view === "initial") setView("dual");
 
-    setChat((prev) => [...prev, { role: "user", text: text }]);
+    setChat((prev) => [...prev, { role: "user", text: userTextOverride }]);
 
     setInput("");
 
@@ -454,9 +562,88 @@ export default function CampaignBuilder() {
   };
 
   const fillMagicPrompt = () => {
-    setInput(MAGIC_PROMPT_TEMPLATE);
+    setTokenizedMode(true);
+    setPromptTokens(PROMPT_TOKENS.map((t) => ({ ...t, value: null })));
 
-    // Focus text area logic can go here if using a ref
+    setEditingTokenKey(PROMPT_TOKENS[0].key);
+    setInput("");
+
+    inputRef.current?.focus();
+  };
+
+  const handleTokenInput = (userText) => {
+    if (!userText.trim()) return;
+
+    const updatedTokens = promptTokens.map((token) =>
+      token.key === editingTokenKey ? { ...token, value: userText } : token
+    );
+
+    setPromptTokens(updatedTokens);
+    setInput("");
+
+    const currentTokenIndex = PROMPT_TOKENS.findIndex(
+      (t) => t.key === editingTokenKey
+    );
+    const nextToken = updatedTokens.find(
+      (t, index) => t.value === null && index > currentTokenIndex
+    );
+
+    if (nextToken) {
+      setEditingTokenKey(nextToken.key);
+      inputRef.current?.focus();
+    } else {
+      const finalPrompt = compileMagicPrompt(updatedTokens);
+      setInput(finalPrompt);
+
+      setTokenizedMode(false);
+      setEditingTokenKey(null);
+
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleMailboxSave = (selectedEmails) => {
+    const selectedStr = selectedEmails.join(", ");
+
+    const updatedTokens = promptTokens.map((token) =>
+      token.key === "email" ? { ...token, value: selectedStr } : token
+    );
+
+    setPromptTokens(updatedTokens);
+    setIsMailboxPickerOpen(false);
+
+    // Advance the tokenized flow manually using the new value
+    handleTokenInput(selectedStr);
+  };
+
+  const handleChipClick = (tokenKey, tokenValue) => {
+    // If clicking the Mailbox chip, open the picker
+    if (tokenKey === "email") {
+      // Find current selections for the modal initialization
+      const initialEmailToken = promptTokens.find((t) => t.key === "email");
+      const initialEmailSelection = initialEmailToken?.value
+        ? initialEmailToken.value.split(", ")
+        : [];
+
+      // Set the editing key and open the picker
+      setEditingTokenKey(tokenKey);
+      setIsMailboxPickerOpen(true);
+      // Do not focus the text input field
+      return;
+    }
+
+    // Default handling for text input chips
+    if (tokenizedMode || areAllTokensFilled) {
+      setEditingTokenKey(tokenKey);
+      setInput(tokenValue || "");
+
+      if (areAllTokensFilled) {
+        // If clicking a chip after completion, return to tokenized mode
+        setTokenizedMode(true);
+      }
+
+      inputRef.current?.focus();
+    }
   };
 
   const toggleMailbox = (id) => {
@@ -482,22 +669,45 @@ export default function CampaignBuilder() {
   };
 
   const showICP = !!editor.icp.goal;
-
   const showCompany = showICP && !!editor.company.url;
-
   const showData = showCompany && !!editor.dataSource.source_type;
-
   const showCadence = showData && !!editor.cadence.steps;
-
   const showMailbox = showCadence;
-
   const showLaunch = showMailbox && editor.mailbox.selected.length > 0;
 
-  // --- RENDER: INITIAL VIEW ---
+  // --- RENDER: INITIAL VIEW (UPDATED) ---
 
   if (view === "initial") {
+    const focusedToken = promptTokens.find((t) => t.key === editingTokenKey);
+
+    const exampleText =
+      focusedToken?.key === "goal"
+        ? "(e.g., 50 leads/month)"
+        : focusedToken?.key === "url"
+        ? "(e.g., infynd.com)"
+        : "(e.g., VP Sales)";
+
+    const currentPlaceholder = tokenizedMode
+      ? focusedToken?.key === "email"
+        ? "Click the chip above to select mailboxes..."
+        : `Enter ${focusedToken?.label || "details"} ${exampleText}...`
+      : "Describe your campaign goals here...";
+
+    const initialEmailToken = promptTokens.find((t) => t.key === "email");
+    const initialEmailSelection = initialEmailToken?.value
+      ? initialEmailToken.value.split(", ")
+      : [];
+
     return (
       <div className="flex flex-col items-center p-12 bg-white h-[85vh] relative">
+        {/* Mailbox Picker Modal */}
+        <MailboxPickerOverlay
+          isOpen={isMailboxPickerOpen}
+          onClose={() => setIsMailboxPickerOpen(false)}
+          onSave={handleMailboxSave}
+          initialSelection={initialEmailSelection}
+        />
+
         <div className="flex flex-col items-center mb-10">
           <h1 className="text-4xl font-bold text-[#23272f] mb-2 text-center">
             Create Your Campaign
@@ -524,9 +734,7 @@ export default function CampaignBuilder() {
                   {type.title}
                 </CardTitle>
 
-                <CardDescription className="text-sm text-[#6b778c]">
-                  {type.description}
-                </CardDescription>
+                <p className="text-sm text-[#6b778c]">{type.description}</p>
               </CardHeader>
             </Card>
           ))}
@@ -543,23 +751,92 @@ export default function CampaignBuilder() {
               variant="ghost"
               className="text-xs h-8 gap-2 bg-purple-50 border border-purple-100 text-purple-600 hover:bg-purple-100 hover:text-purple-700 transition-all shadow-sm rounded-full"
               onClick={fillMagicPrompt}
+              style={{ display: tokenizedMode ? "none" : "flex" }}
             >
               <Sparkles className="h-3 w-3 fill-purple-600" />
               Use Magic Prompt
             </Button>
           </div>
 
-          {/* Input Box Container */}
+          {/* --- 1. CONFIGURATION BOX (CHIPS) --- */}
+          {tokenizedMode && !areAllTokensFilled && (
+            <div className="flex flex-col gap-3 p-5 rounded-t-2xl bg-gray-100 border border-b-0 border-gray-300 shadow-md">
+              <div className="flex flex-wrap gap-3">
+                {promptTokens.map((token) => (
+                  <div
+                    key={token.key}
+                    onClick={() => handleChipClick(token.key, token.value)}
+                    className={`
+                              flex items-center gap-1 px-3 py-2 text-sm rounded-full transition-all duration-200 cursor-pointer 
+                              shadow-sm 
+                              ${
+                                token.value
+                                  ? "bg-blue-500 text-white font-medium hover:bg-blue-600"
+                                  : "bg-white text-gray-700 border border-gray-300 hover:border-blue-400"
+                              }
+                              ${
+                                editingTokenKey === token.key
+                                  ? "ring-2 ring-offset-2 ring-[#e63946] border-[#e63946] shadow-xl scale-[1.03] z-10"
+                                  : "z-0"
+                              }
+                              ${
+                                token.key === "email" && token.value
+                                  ? "max-w-xs justify-between"
+                                  : ""
+                              }
+                          `}
+                  >
+                    {/* Placeholder Chip Label */}
+                    {!token.value && (
+                      <span className="opacity-75">{token.label}:</span>
+                    )}
 
-          <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 focus-within:ring-2 focus-within:ring-[#e63946] focus-within:border-transparent transition-all overflow-hidden">
+                    {/* Value Display */}
+                    <span className="font-semibold truncate">
+                      {/* Show first email + count if multiple are selected */}
+                      {token.key === "email" && token.value
+                        ? token.value.split(", ").length > 1
+                          ? `${token.value.split(", ")[0]} +${
+                              token.value.split(", ").length - 1
+                            }`
+                          : token.value
+                        : token.value || token.placeholder}
+                    </span>
+
+                    {/* Dropdown/Check Icon */}
+                    {token.key === "email" && (
+                      <ChevronDown
+                        className={`h-4 w-4 ml-1 ${
+                          token.value ? "text-white" : "text-gray-500"
+                        }`}
+                      />
+                    )}
+                    {token.value && token.key !== "email" && (
+                      <CheckCircle className="h-4 w-4 ml-1" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* --- END CONFIGURATION BOX --- */}
+
+          {/* --- 2. ACTION BOX (INPUT) --- */}
+          <div
+            className={`relative bg-white rounded-b-2xl shadow-xl 
+                        ${
+                          tokenizedMode && !areAllTokensFilled
+                            ? "border border-[#e63946] rounded-t-none"
+                            : "border border-gray-200 rounded-2xl"
+                        }`}
+          >
             <textarea
+              ref={inputRef}
               className="w-full min-h-[120px] p-6 pb-16 text-lg text-gray-700 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed"
-              placeholder="Describe your campaign goals here..."
+              placeholder={currentPlaceholder}
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
-
-                // Auto-grow
 
                 e.target.style.height = "auto";
 
@@ -570,9 +847,20 @@ export default function CampaignBuilder() {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
 
-                  sendMessage(input);
+                  if (tokenizedMode && !areAllTokensFilled) {
+                    // If editing email chip, open picker on Enter press
+                    if (editingTokenKey === "email") {
+                      handleChipClick("email", null); // Re-open picker
+                    } else {
+                      handleTokenInput(input);
+                    }
+                  } else {
+                    sendMessage(input);
+                  }
                 }
               }}
+              // When email chip is focused, the text input should be disabled (forcing modal interaction)
+              disabled={tokenizedMode && editingTokenKey === "email"}
             />
 
             {/* Bottom Actions Bar (Pinned Inside) */}
@@ -605,23 +893,57 @@ export default function CampaignBuilder() {
                 </Button>
               </div>
 
+              {/* The regular Send Button now handles both token input and final send */}
               <Button
                 type="button"
                 size="icon"
                 className="bg-[#e63946] text-white rounded-full h-10 w-10 hover:bg-red-700 shadow-md transition-transform active:scale-95"
-                onClick={() => sendMessage(input)}
+                // If tokenized mode is active (and tokens aren't filled yet), use the token handler (unless it's the email chip)
+                onClick={() => {
+                  if (tokenizedMode && !areAllTokensFilled) {
+                    if (editingTokenKey === "email") {
+                      handleChipClick("email", null); // Open picker
+                    } else {
+                      handleTokenInput(input); // Send text input
+                    }
+                  } else {
+                    sendMessage(input); // Final send
+                  }
+                }}
+                // Highlight button based on action
+                style={
+                  tokenizedMode && editingTokenKey === "email"
+                    ? { backgroundColor: "#2563eb" }
+                    : {}
+                }
               >
-                <Send className="h-5 w-5" />
+                {tokenizedMode && editingTokenKey === "email" ? (
+                  <Mail className="h-5 w-5" /> // Show Mail icon when focusing email chip
+                ) : (
+                  <Send className="h-5 w-5" />
+                )}
               </Button>
             </div>
           </div>
+          {/* --- END ACTION BOX --- */}
 
           {/* Helper text if Magic Prompt is used */}
 
-          {input === MAGIC_PROMPT_TEMPLATE && (
+          {tokenizedMode && !areAllTokensFilled && (
             <p className="text-xs text-purple-600 mt-2 ml-2 animate-pulse font-medium">
-              * Pro Tip: Fill in the [bracketed text] with your specific details
-              for best results.
+              {editingTokenKey === "email"
+                ? "* Click the **Sender Email** chip or the blue mail icon to select mailboxes."
+                : `* Enter the value for the **${
+                    focusedToken?.label || "field"
+                  }** and press Enter, or click a chip to edit it.`}
+            </p>
+          )}
+
+          {/* New helper text when prompt is compiled and ready to send */}
+          {!tokenizedMode && areAllTokensFilled && (
+            <p className="text-xs text-green-600 mt-2 ml-2 font-medium">
+              ✨ **Ready to Launch!** Review the compiled prompt above and click
+              the Send button to generate your campaign.
             </p>
           )}
         </div>
@@ -629,12 +951,10 @@ export default function CampaignBuilder() {
     );
   }
 
-  // --- RENDER: DUAL VIEW ---
-
+  // --- RENDER: DUAL VIEW (Omitted for brevity) ---
   return (
     <div className="flex h-[95vh] w-full bg-white overflow-hidden custom-scrollbar-red-600">
-      {/* LEFT: CHAT */}
-
+      {/* ... Dual View JSX ... */}
       <div className="flex-[6] relative flex flex-col items-center bg-white border-r border-[#eaeaea] min-w-[500px] max-w-[60%]">
         <div className="w-full flex items-center gap-2 p-4 border-b border-[#f3f4f9]">
           <div className="h-8 w-8 rounded-full bg-[#e63946] flex items-center justify-center">
@@ -744,8 +1064,7 @@ export default function CampaignBuilder() {
         </div>
       </div>
 
-      {/* RIGHT: VISUAL EDITOR */}
-
+      
       <div className="flex-[4] px-8 py-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 border-b pb-2">
           <span className="font-bold text-lg text-[#23272f]">
@@ -1049,7 +1368,7 @@ export default function CampaignBuilder() {
             </div>
           )}
         </div>
-      </div>
+        </div>
     </div>
   );
 }
