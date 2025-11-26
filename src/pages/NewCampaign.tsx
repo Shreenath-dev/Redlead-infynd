@@ -393,13 +393,12 @@ export default function CampaignBuilder() {
       - Always provide 3 relevant 'suggested_actions'.
 
 
-
       **OUTPUT:** JSON Schema only.
 
     `;
 
     const chatSession = ai.chats.create({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
 
       history: [
         { role: "user", parts: [{ text: prompt }] },
@@ -480,7 +479,7 @@ export default function CampaignBuilder() {
     }
 
     if (data_source && data_source.source_type) {
-      const simulatedUpload = 1500;
+      const simulatedUpload = 15000000;
 
       nextEditor.dataSource = {
         ...nextEditor.dataSource,
@@ -675,7 +674,6 @@ export default function CampaignBuilder() {
   const showMailbox = showCadence;
   const showLaunch = showMailbox && editor.mailbox.selected.length > 0;
 
-  // --- RENDER: INITIAL VIEW (UPDATED) ---
 
   if (view === "initial") {
     const focusedToken = promptTokens.find((t) => t.key === editingTokenKey);
