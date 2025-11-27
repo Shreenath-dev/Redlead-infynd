@@ -18,6 +18,7 @@ import Inbox from "./pages/Inbox";
 import NotFound from "./pages/NotFound";
 import CampaignDetails from "./pages/CampaignDetails";
 import Knowledge from "./pages/Knowledge";
+import SequencePage from "./pages/Sequence";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -51,6 +52,7 @@ const App = () => (
               <Route path="tasks" element={<Tasks />} />
               <Route path="inbox" element={<Inbox />} />
               <Route path="knowledge" element={<Knowledge />} />
+              <Route path="sequence" element={<SequencePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

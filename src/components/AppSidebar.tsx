@@ -41,7 +41,7 @@ const mainItems = [
 
 const engageItems = [
   { title: "Campaigns", url: "/campaigns", icon: MessageSquare },
-  { title: "Sequences", url: "/sequences", icon: ListOrdered },
+  { title: "Sequences", url: "/sequence", icon: ListOrdered },
   { title: "Tasks", url: "/tasks", icon: CheckSquare },
   { title: "Inbox", url: "/inbox", icon: Inbox },
 ];

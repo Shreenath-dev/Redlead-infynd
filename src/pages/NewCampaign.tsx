@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 
-import { GoogleGenAI } from "@google/genai";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { Checkbox } from "@/components/ui/checkbox";
+
+import { GoogleGenAI } from "@google/genai";
 
 import {
   Mic,
@@ -28,173 +28,337 @@ import {
   Sparkles,
   ChevronDown,
   X,
+  Volume2,
 } from "lucide-react";
 
-// --- CONFIGURATION ---
+// ⭐ FIX: Importing the newly created placeholder file
+
+import SequencePage from "./Sequence";
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI;
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+
+const DESIRED_VOICE_NAME = "Google UK English Female";
+
+// --------------------
 
 // --- STATIC DATA ---
 
 const CAMPAIGN_TYPES = [
   {
     title: "Book Meetings",
+
     description: "Optimize sequence for calendar bookings.",
+
     icon: Calendar,
   },
 
   {
     title: "Product Selling",
+
     description: "Run direct campaigns for product conversion.",
+
     icon: Zap,
   },
 
   {
     title: "Goal: 100 leads/Month",
+
     description: "Consistent lead flow targeting.",
+
     icon: TrendingUp,
   },
 
   {
     title: "Goal: 200 Prospects",
+
     description: "High volume aggressive outreach.",
+
     icon: TrendingUp,
   },
 ];
 
-// --- UPDATED: Available emails (used for the dropdown)
 const AVAILABLE_EMAILS = [
-  { id: "1", email: "shreenath.py@gmail.com", provider: "Google" },
+  { id: "1", email: "shreenath@infynd.com", provider: "Google" },
 
   { id: "2", email: "sales@infynd.com", provider: "Outlook" },
 
   { id: "3", email: "outreach@infynd.com", provider: "SMTP" },
 
   { id: "4", email: "info@infynd.com", provider: "Google" },
+
+  { id: "5", email: "shreenath@n2b.com", provider: "Google" },
+
+  { id: "6", email: "sales@n2b.com", provider: "Outlook" },
+
+  { id: "7", email: "outreach@n2b.com", provider: "SMTP" },
+
+  { id: "8", email: "info@n2b.com", provider: "Google" },
+
+  { id: "9", email: "shreenath@mk360.com", provider: "Google" },
+
+  { id: "10", email: "sales@mk360.com", provider: "Outlook" },
+
+  { id: "11", email: "outreach@mk360.com", provider: "SMTP" },
+
+  { id: "12", email: "info@mk360.com", provider: "Google" },
 ];
 
 const DUMMY_LEADS = [
   {
     name: "Sarah Miller",
+
     email: "sarah@tech.com",
+
     job: "CTO",
+
     company: "TechFlow",
   },
 
   {
     name: "David Chen",
+
     email: "d.chen@saas.io",
+
     job: "VP Eng",
+
     company: "SaaSify",
   },
 
   {
     name: "Amanda Lo",
+
     email: "amanda@fin.co",
+
     job: "Head of IT",
+
     company: "FinCorp",
   },
 ];
 
 // --- TOKENIZED INPUT CONSTANTS ---
+
 const PROMPT_TOKENS = [
   {
     key: "targetRole",
+
     placeholder: "[Target Role]",
+
     label: "Target Role",
+
     value: null,
   },
+
   {
     key: "industry",
+
     placeholder: "[Industry]",
+
     label: "Industry",
+
     value: null,
   },
+
   {
     key: "location",
+
     placeholder: "[Location]",
+
     label: "Location",
+
     value: null,
   },
-  { key: "goal", placeholder: "[100] leads/month", label: "Goal", value: null },
-  {
-    key: "objective",
-    placeholder: "[Booking Meetings]",
-    label: "Objective",
-    value: null,
-  },
+
+  { key: "goal", placeholder: "[100 leads/month]", label: "Goal", value: null },
+
   { key: "url", placeholder: "[Your URL]", label: "Website", value: null },
+
   {
     key: "dataSource",
+
     placeholder: "[CSV/Salesforce]",
+
     label: "Data Source",
+
     value: null,
   },
+
   {
     key: "email",
+
     placeholder: "[Select Emails]",
+
     label: "Sender Email",
+
     value: null,
-  }, // Value will be a comma-separated string
+  },
 ];
 
-const MAGIC_PROMPT_TEMPLATE_V2 = `I want to launch a campaign targeting {targetRole} in {industry} for {location}. My goal is to generate {goal} with the objective of {objective}. My website is {url}. Leads are currently stored in {dataSource}. Please create a 5-step sequence using Email, Phone & LinkedIn, sending from {email}.`;
+const MAGIC_PROMPT_TEMPLATE_V2 = `I want to launch a campaign targeting {targetRole} in {industry} for {location}. My goal is to generate {goal}. My website is {url}. Leads are currently stored in {dataSource}. Please create a 5-step sequence using Email, Phone & LinkedIn, sending from {email}.`;
 
-// --- CAMPAIGN SCHEMA (Simplified for display) ---
+// --- GEMINI CAMPAIGN PROMPT TEMPLATE (Pulled out for correction logic) ---
+
+const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal is to parse the user's input and generate the JSON response using the following workflow and rules:
+
+
+
+**CONTEXT & AMBIGUITY RULES:**
+
+- This is a sales outreach tool. If you see 'SME'/'sme', assume it means 'Subject Matter Expert' job role  understand the context and extract.
+
+- If you see any term that could be a sales metric (e.g., 'leaves', 'lets', 'leeds'), assume the user means **leads** (sales prospects).
+
+- If you see 'in front dot com' or similar phrases, assume the user meant 'infynd.com' (since it is visible in the chat history, assume this company is relevant).
+
+- Normalize industries (e.g., 'health care' -> 'Healthcare', 'financial' -> 'Financial Services').
+
+
+
+**STRICT WORKFLOW:**
+
+
+
+1. **ICP:** Required parameters (target job role, location, industry, goal). If anything is missing, ask for it. Calculate required leads internally (Goal / 0.01).
+
+  // MANDATORY: If the user provides data for a field in the prompt (e.g., role, industry, goal, location), you MUST return the 'icp' object in the JSON with the extracted data dont repeat the questions that are proviously asked.
+
+
+
+2. **Company:** Ask URL. **ACTION:** If URL given, strict rule: GENERATE Value Prop & Pain Points within 1-2 lines.
+
+
+
+3. **Data Source:** **DO NOT ASK FOR SOURCE. Assume CSV upload and proceed to step 4 if URL is present.** - Calculate Required leads (Goal / 0.01).
+
+  - Assume Uploaded = 150000.
+
+  - COMPARE: If Uploaded < Required, WARN the user.
+
+  - If Uploaded >= Required, suggest Touchpoints.
+
+
+
+4. Touchpoints & Cadence:** ask channels first(provide quick action) with your suggestion based on the icp lead size , company profile, then generate steps with day wise based on the touchpoint, industry and goal.every time personalise email is initial step().
+
+
+
+5. **Mailbox:** Ask user to select sender accounts(if user has multiple domain mailid make them as cluster by grouping similar domain and ask which cluster to select and show only that specified mailbox).
+
+    // CRITICAL FIX: The quick action should be a specific instruction like "Select all infynd.com emails" based on the clustered list provided in the context.
+
+
+
+6. **Launch:** Only when Mailbox is selected, ask for confirmation.
+
+
+
+**RULES:**
+
+- Content must be **1-2 lines max**.
+
+- **CRITICAL: You MUST return 3 'suggested_actions'. These actions MUST be direct, single-click examples of the missing values, not questions.**
+
+  - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 100 leads/month").
+
+  - **SINGLE MODE:** If only one key ICP parameter is missing, provide 3 simple examples relevant only to that key (e.g., "USA", "UK", "100 leads/month").
+
+  - Prioritize missing ICP fields. Only suggest "Provide company URL" if the ICP is 100% complete.
+
+  -Don't skip touchpoints and cadence step and mailbox step.
+
+  -The quick action should be relavant to the current step.
+
+  -Strictly follow mailbox logic.
+
+  -Dont haulcinate and repeat the questions
+
+**OUTPUT:** JSON Schema only.
+
+`;
+
+// -------------------------------------------------------------------
+
+// --- CAMPAIGN SCHEMA ---
+
 const CAMPAIGN_SCHEMA = {
   type: "object",
+
   properties: {
     ai_response: { type: "string", description: "Concise 1-2 line response." },
+
     suggested_actions: { type: "array", items: { type: "string" } },
+
     icp: {
       type: "object",
+
       properties: {
         role: { type: "string" },
+
         industry: { type: "string" },
+
         location: { type: "string" },
+
         goal: { type: "string" },
-        objective: { type: "string" },
       },
     },
+
     company: {
       type: "object",
+
       properties: {
         url: { type: "string" },
+
         value_prop: { type: "string" },
+
         pain_points: { type: "string" },
       },
     },
+
     data_source: {
       type: "object",
+
       properties: {
         source_type: { type: "string" },
+
         status: { type: "string" },
       },
     },
+
     cadence: {
       type: "object",
+
       properties: { channels: { type: "string" }, steps: { type: "string" } },
     },
+
     mailbox_selection: {
       type: "array",
+
       items: { type: "string" },
-      description: "List of emails user mentioned to use",
+
+      description:
+        "List of emails or domains (e.g., 'infynd.com') the user selected/confirmed to use",
     },
+
     launch_ready: { type: "boolean" },
   },
+
   required: ["ai_response", "suggested_actions"],
 };
 
-// --- MAILBOX PICKER OVERLAY COMPONENT ---
+// --- MAILBOX PICKER OVERLAY COMPONENT (remains the same) ---
+
 const MailboxPickerOverlay = ({
   isOpen,
+
   onClose,
+
   onSave,
+
   initialSelection,
 }) => {
   // initialSelection is an array of email strings
+
   const [selectedEmails, setSelectedEmails] = useState(initialSelection);
 
   useEffect(() => {
@@ -220,6 +384,7 @@ const MailboxPickerOverlay = ({
           <CardTitle className="text-xl font-bold">
             Select Sender Mailboxes
           </CardTitle>
+
           <Button
             variant="ghost"
             size="icon"
@@ -229,42 +394,50 @@ const MailboxPickerOverlay = ({
             <X className="h-5 w-5" />
           </Button>
         </CardHeader>
+
         <CardContent className="p-0 space-y-3 max-h-80 overflow-y-auto custom-scrollbar-red-600">
           {AVAILABLE_EMAILS.map((mail) => (
             <div
               key={mail.id}
               className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors
-                                ${
-                                  selectedEmails.includes(mail.email)
-                                    ? "bg-red-50 border-red-200"
-                                    : "bg-white border-gray-100 hover:bg-gray-50"
-                                }`}
+
+                ${
+                  selectedEmails.includes(mail.email)
+                    ? "bg-red-50 border-red-200"
+                    : "bg-white border-gray-100 hover:bg-gray-50"
+                }`}
               onClick={() => toggleEmail(mail.email)}
             >
               <div className="flex items-center gap-3">
                 <Checkbox
                   checked={selectedEmails.includes(mail.email)}
                   // Read-only click handler to allow div click to function
+
                   onCheckedChange={() => {}}
-                  className="data-[state=checked]:bg-[#e63946] data-[state=checked]:border-[#e63946]"
+                  className="data-[state=checked]:bg-[#e63946] data-[state=checked]:border-[#e63946]" // ⭐ FIX: Correctly applies red styling
                 />
+
                 <div>
                   <p className="text-sm font-medium text-gray-900">
                     {mail.email}
                   </p>
+
                   <span className="text-xs text-gray-400">{mail.provider}</span>
                 </div>
               </div>
+
               {selectedEmails.includes(mail.email) && (
                 <CheckCircle className="h-4 w-4 text-[#e63946]" />
               )}
             </div>
           ))}
         </CardContent>
+
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
+
           <Button
             onClick={handleSave}
             className="bg-green-600 hover:bg-green-700"
@@ -279,42 +452,81 @@ const MailboxPickerOverlay = ({
 };
 
 // --- CAMPAIGN BUILDER COMPONENT ---
+
 export default function CampaignBuilder() {
+  const [appView, setAppView] = useState("builder");
+
   const [view, setView] = useState("initial");
+
   const [chat, setChat] = useState([
     {
       role: "ai",
-      text: "Hello! I'm your AI campaign architect. Select a goal or describe your campaign to start.",
+
+      text: `Hello! I'm your AI Campaign Architect. You can start by describing your goals, e.g., **"I need to target CFOs in Financial Services in the UK to generate 100 meetings this quarter. My website is example.com, leads are in HubSpot."**`,
     },
   ]);
+
   const [input, setInput] = useState("");
+
   const [isLoading, setIsLoading] = useState(false);
+
   const [editor, setEditor] = useState({
     icp: {},
+
     calculations: { required: 0, uploaded: 0 },
+
     company: {},
+
     dataSource: {},
+
     cadence: {},
+
     mailbox: { selected: [] },
+
     launch: { status: "Draft" },
   });
+
+  // console.log("eeeeeeee", editor); // Disabled console.log for cleaner output
+
   const [dynamicQuickActions, setDynamicQuickActions] = useState([]);
+
   const editorRef = useRef(editor);
+
   const chatEndRef = useRef(null);
+
   const fileInputRef = useRef(null);
+
   const inputRef = useRef(null);
 
-  // --- NEW STATES FOR TOKENIZED INPUT ---
+  const chatRef = useRef(chat); // ⭐ FIX: Create a ref for the chat state
+
+  // --- VOICE STATES & REFS ---
+
+  const [isListening, setIsListening] = useState(false);
+
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const recognitionRef = useRef(null);
+
+  // -------------------------
+
   const [promptTokens, setPromptTokens] = useState(PROMPT_TOKENS);
+
   const [tokenizedMode, setTokenizedMode] = useState(false);
+
   const [editingTokenKey, setEditingTokenKey] = useState(PROMPT_TOKENS[0].key);
-  // NEW: State for the Mailbox Picker
+
   const [isMailboxPickerOpen, setIsMailboxPickerOpen] = useState(false);
-  // ---------------------------------------
 
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  // ⭐ FIX: Update the chat ref whenever chat state changes
+
+  useEffect(() => {
+    chatRef.current = chat;
+  }, [chat]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -322,16 +534,21 @@ export default function CampaignBuilder() {
 
   const calculateNeeds = (goalStr) => {
     const match = String(goalStr).match(/(\d+)/);
+
     const goal = match ? parseInt(match[1], 10) : 0;
+
     return Math.ceil(goal / 0.01);
   };
 
   const compileMagicPrompt = (tokens = promptTokens) => {
     let compiled = MAGIC_PROMPT_TEMPLATE_V2;
+
     tokens.forEach((t) => {
       const value = t.value || t.placeholder;
+
       compiled = compiled.replace(`{${t.key}}`, value);
     });
+
     return compiled;
   };
 
@@ -339,107 +556,309 @@ export default function CampaignBuilder() {
     return promptTokens.every((t) => t.value !== null);
   }, [promptTokens]);
 
-  const processMessage = async (userText) => {
+  // ⭐ NEW HELPER: Function to cluster available emails by domain
+
+  const clusterEmailsByDomain = (emails) => {
+    // Map domains to a list of emails for that domain
+
+    const domainClusters = emails.reduce((acc, mail) => {
+      const domain = mail.email.split("@")[1];
+
+      if (!acc[domain]) {
+        acc[domain] = [];
+      }
+
+      acc[domain].push(mail.email);
+
+      return acc;
+    }, {});
+
+    // Format for the AI
+
+    return Object.entries(domainClusters)
+      .map(
+        ([domain, emailList], index) =>
+          `Domain ${index + 1}: **${domain}** (Emails: ${emailList.join(", ")})`
+      )
+      .join("\n");
+  };
+
+  // --- TTS/STT FUNCTIONS ---
+
+  const stopSpeech = () => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+
+      setIsSpeaking(false);
+    }
+  };
+
+  // ⭐ TTS VOICE CHANGE IMPLEMENTED HERE
+
+  const speakAiResponse = (text) => {
+    if (!("speechSynthesis" in window)) {
+      console.warn("Speech Synthesis not supported in this browser.");
+
+      return;
+    }
+
+    stopSpeech();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    const voices = window.speechSynthesis.getVoices();
+
+    const desiredVoice = voices.find((v) => v.name === DESIRED_VOICE_NAME);
+
+    if (desiredVoice) {
+      utterance.voice = desiredVoice;
+    }
+
+    utterance.onstart = () => setIsSpeaking(true);
+
+    utterance.onend = () => setIsSpeaking(false);
+
+    utterance.onerror = (event) => {
+      console.error("TTS error:", event);
+
+      setIsSpeaking(false);
+    };
+
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // ⭐ STT STABILITY AND ERROR HANDLING FIXES
+
+  const startSpeechToText = () => {
+    stopSpeech();
+
+    if (!("webkitSpeechRecognition" in window)) {
+      alert(
+        "Your browser doesn't support the Web Speech API. Please use Chrome/Edge for this feature."
+      );
+
+      return;
+    }
+
+    if (!recognitionRef.current) {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      const recognition = new SpeechRecognition();
+
+      recognition.continuous = false;
+
+      recognition.interimResults = false;
+
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+
+        setInput("Listening... Speak clearly.");
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+
+        setInput(transcript);
+
+        setTimeout(() => {
+          // CRITICAL: Send the transcribed text and set the voice flag to true
+
+          sendMessage(transcript, transcript, true);
+        }, 100);
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+
+        let errorMessage = "Recognition failed. Please try again.";
+
+        if (event.error === "network") {
+          errorMessage =
+            "Network/Service error. Please check internet connection or try speaking closer to the mic.";
+        } else if (
+          event.error === "not-allowed" ||
+          event.error === "service-not-allowed"
+        ) {
+          errorMessage =
+            "Mic access blocked or denied. Check browser permissions.";
+        } else if (event.error === "no-speech") {
+          errorMessage = "No speech detected. Please try again.";
+        }
+
+        setInput(errorMessage);
+
+        recognition.stop();
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+
+        if (!isLoading && input === "Listening... Speak clearly.") {
+          setInput("");
+        }
+      };
+
+      recognitionRef.current = recognition;
+    }
+
+    if (!isListening) {
+      recognitionRef.current.start();
+    }
+  };
+
+  // -------------------------
+
+  const processMessage = async (userText, isVoiceInput = false) => {
+    if (!ai) {
+      setChat((prev) => [
+        ...prev,
+
+        {
+          role: "ai",
+
+          text: "Error: AI client is not initialized. Check configuration.",
+        },
+      ]);
+
+      setIsLoading(false);
+
+      return;
+    }
+
     setIsLoading(true);
+
+    stopSpeech();
 
     if (view === "initial") setView("dual");
 
-    const context = {
-      ...editorRef.current,
+    // CRITICAL FIX: Construct the full history for the model
 
-      mailbox_context: {
-        available: AVAILABLE_EMAILS.map((e) => e.email),
+    // Map the current chat state to the format required by the Gemini SDK
 
-        currently_selected: editorRef.current.mailbox.selected,
-      },
-    };
+    const historyForGemini = chatRef.current.map((msg) => ({
+      // Gemini roles: 'user' for user, 'model' for AI response
 
-    const prompt = `
+      role: msg.role === "ai" ? "model" : "user",
 
-      You are an expert Campaign Architect.
+      parts: [{ text: msg.text }],
+    }));
 
-      **Current State:** ${JSON.stringify(context)}
+    let systemPrompt = GEMINI_PROMPT_TEMPLATE;
 
-      
+    // ⭐ NEW FIX: Mailbox Clustering Context for Step 5
 
-      **STRICT WORKFLOW:**
+    const clusteredMailboxes = clusterEmailsByDomain(AVAILABLE_EMAILS);
 
-      1. **ICP:** Required parameters (target job role, location, industry, goal, objective). If anything is missing, ask for it. Calculate required leads internally (Goal / 0.01).
+    const MailboxContext = `
 
-      2. **Company:** Ask URL. **ACTION:** If URL given, GENERATE Value Prop & Pain Points within 1-2 lines.
+        **CURRENT MAILBOX STATUS (CRITICAL):**
 
-      3. **Data Source:** Ask for source (CSV/CRM). 
+        You have access to the following clustered sender mailboxes. Use the domain names for suggestions in Step 5:
 
-          - If they upload a source, assume "Uploaded" = 1500.
+        ${clusteredMailboxes}
 
-          - COMPARE: If Uploaded < Required (${
-            editorRef.current.calculations.required
-          }), WARN the user.
+        
 
-          - If Uploaded >= Required, suggest Touchpoints.
-
-      4. **Touchpoints & Cadence:** Suggest channels first, then generate steps.
-
-      5. **Mailbox:** Ask user to select sender accounts.
-
-      6. **Launch:** Only when Mailbox is selected, ask for confirmation.
-
-
-
-      **RULES:**
-
-      - Content must be **1-2 lines max**.
-
-      - Always provide 3 relevant 'suggested_actions'.
-
-
-      **OUTPUT:** JSON Schema only.
+        **MAILBOX LOGIC:** When the workflow reaches step 5, you MUST suggest quick actions like: 'Select all infynd.com emails', 'Select the n2b.com emails', etc., based on these clusters.
 
     `;
 
+    systemPrompt = MailboxContext + "\n" + systemPrompt;
+
+    if (isVoiceInput) {
+      // STT correction logic remains, but applies to the updated system prompt
+
+      const CorrectionContext = `
+
+            **STT CORRECTION RULES (CRITICAL):**
+
+            1. The following input is from a microphone, which may contain errors. Fix any misspellings, proper nouns, and campaign-specific terms.
+
+            2. If you see 'leaves', 'leafs', 'leeds', or 'lets', assume the sales term 'leads'.
+
+            3. If you see 'in front dot com' or similar phrases, assume the user meant 'infynd.com' (based on available mailboxes).
+
+            4. Normalize industries (e.g., 'health care' -> 'Healthcare', 'financial' -> 'Financial Services').
+
+            5. ONLY use the corrected, clean input when evaluating the core campaign architecture goal below.
+
+            
+
+            **ORIGINAL USER INPUT (to be corrected):** "${userText}"
+
+            
+
+            **INSTRUCTIONS:** First, internally correct the user's input. Then, proceed with the campaign workflow below using the corrected input.
+
+        `;
+
+      systemPrompt = CorrectionContext + `\n` + systemPrompt; // Append the rest of the system prompt
+    }
+
     const chatSession = ai.chats.create({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
+
+      // History now contains ALL previous turns + the system prompt before the first message.
 
       history: [
-        { role: "user", parts: [{ text: prompt }] },
-        { role: "user", parts: [{ text: userText }] },
+        // The system prompt is prepended to the history as a 'user' instruction to set the model's behavior.
+
+        { role: "user", parts: [{ text: systemPrompt }] },
+
+        // All conversation messages follow
+
+        ...historyForGemini,
       ],
     });
 
     try {
       const result = await chatSession.sendMessage({
+        // The last user message is sent via the message parameter for this turn
+
         message: userText,
 
         config: {
           responseMimeType: "application/json",
+
           responseSchema: CAMPAIGN_SCHEMA,
         },
       });
 
       const response = JSON.parse(result.text.trim());
 
-      handleAiStateUpdate(response, userText);
+      handleAiStateUpdate(response, userText, isVoiceInput);
     } catch (error) {
-      console.error(error);
+      console.error("Gemini API Error:", error);
 
       setChat((prev) => [
         ...prev,
+
         { role: "ai", text: "System error. Please retry." },
       ]);
+
+      if (isListening && recognitionRef.current) recognitionRef.current.stop();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAiStateUpdate = (response, userText) => {
+  const handleAiStateUpdate = (response, userText, isVoiceInput) => {
     const {
       ai_response,
+
       suggested_actions,
+
       icp,
+
       company,
-      data_source,
+
       cadence,
+
       mailbox_selection,
+
       launch_ready,
     } = response;
 
@@ -449,15 +868,33 @@ export default function CampaignBuilder() {
 
     let nextActions = suggested_actions || [];
 
-    if (icp) {
-      nextEditor.icp = { ...nextEditor.icp, ...icp };
+    // 1. ICP Update (Smart Merge Logic - FIXES STATE LOSS)
 
-      if (icp.goal) {
-        const req = calculateNeeds(icp.goal);
+    if (icp) {
+      const currentIcp = nextEditor.icp;
+
+      nextEditor.icp = {
+        role: icp.role || currentIcp.role || null,
+
+        industry: icp.industry || currentIcp.industry || null,
+
+        location: icp.location || currentIcp.location || null,
+
+        goal: icp.goal || currentIcp.goal || null,
+      };
+
+      if (nextEditor.icp.goal) {
+        const match = String(nextEditor.icp.goal).match(/(\d+)/);
+
+        const goalValue = match ? parseInt(match[1], 10) : 0;
+
+        const req = Math.ceil(goalValue / 0.01);
 
         nextEditor.calculations = { ...nextEditor.calculations, required: req };
       }
     }
+
+    // 2. Company/URL Update
 
     if (company) {
       const valProp =
@@ -472,129 +909,191 @@ export default function CampaignBuilder() {
 
       nextEditor.company = {
         ...nextEditor.company,
+
         ...company,
+
         value_prop: valProp,
+
         pain_points: painPoints,
       };
     }
 
-    if (data_source && data_source.source_type) {
-      const simulatedUpload = 15000000;
+    // 3. Data Source HARDCODE (Only if ICP and Company URL are set)
+
+    if (
+      nextEditor.icp.goal &&
+      nextEditor.company.url &&
+      !nextEditor.dataSource.source_type
+    ) {
+      const simulatedUpload = 150000;
+
+      const req = nextEditor.calculations.required;
 
       nextEditor.dataSource = {
-        ...nextEditor.dataSource,
+        source_type: "CSV Upload", // Hardcoded source type
 
-        ...data_source,
+        status: "Processed",
 
         uploaded: simulatedUpload,
 
         dummyData: DUMMY_LEADS,
       };
 
-      const req = nextEditor.calculations.required;
-
       if (
         simulatedUpload < req &&
         !ai_response.toLowerCase().includes("proceed")
       ) {
-        finalResponse = `I've processed your source. ⚠️ **Gap Detected:** You need **${req.toLocaleString()}** leads, but this source has **${simulatedUpload.toLocaleString()}**. Enrich data or proceed?`;
+        finalResponse = `I've processed your CSV. ⚠️ **Gap Detected:** You need **${req.toLocaleString()}** leads, but this source has **${simulatedUpload.toLocaleString()}**. Enrich data or proceed?`;
+      } else {
+        // If data is sufficient, force prompt to move to next step (Cadence)
 
-        nextActions = ["Enrich Data", "Proceed anyway", "Add another source"];
+        finalResponse =
+          finalResponse ||
+          `Data uploaded successfully. I recommend a 5-step sequence using Email and LinkedIn.`;
       }
     }
 
+    // 4. Cadence Update
+
     if (cadence) nextEditor.cadence = { ...nextEditor.cadence, ...cadence };
 
+    // 5. Mailbox Update
+
     if (mailbox_selection && mailbox_selection.length > 0) {
-      const matchedEmails = AVAILABLE_EMAILS.filter((e) =>
+      // ⭐ CRITICAL FIX: Match the AI's selection strings (emails or domains) against the full AVAILABLE_EMAILS.
+
+      const matchedIds = AVAILABLE_EMAILS.filter((e) =>
         mailbox_selection.some(
-          (s) => e.email.includes(s) || s.includes(e.email)
+          (s) =>
+            e.email.toLowerCase().includes(s.toLowerCase()) || // full email or partial match
+            s.toLowerCase().includes(e.email.toLowerCase()) ||
+            e.email.split("@")[1].toLowerCase() ===
+              s.toLowerCase().replace("select all ", "").replace(" emails", "") // Match domain (e.g., 'infynd.com')
         )
       ).map((e) => e.id);
 
-      const newSelection = [
-        ...new Set([...nextEditor.mailbox.selected, ...matchedEmails]),
-      ];
+      // Use the matched IDs as the new selection, replacing the current ones if the AI provided a selection.
 
-      nextEditor.mailbox.selected = newSelection;
+      nextEditor.mailbox.selected = matchedIds;
     }
+
+    // 6. Launch Update
 
     if (launch_ready) {
       nextEditor.launch.status = "Ready";
 
-      finalResponse = "Campaign configured successfully! Ready to launch?";
-
-      nextActions = ["Launch Campaign", "Review Settings"];
+      finalResponse = "Campaign configured successfully!";
     }
 
-    if (nextActions.length === 0) {
-      if (!nextEditor.icp.goal)
-        nextActions = ["100 leads/month", "Book Meetings", "SaaS in UK"];
-      else if (!nextEditor.company.url)
-        nextActions = ["infynd.com", "I don't have a site"];
-      else if (!nextEditor.dataSource.source_type)
-        nextActions = ["Salesforce CRM", "Upload CSV", "HubSpot"];
-      else if (!nextEditor.cadence.steps)
-        nextActions = ["Generate 5-step sequence", "Email & Phone"];
-      else if (!nextEditor.mailbox.selected.length)
-        nextActions = ["Select all emails", "shreenath.py@gmail.com"];
-      else nextActions = ["Launch Campaign"];
+    // *** FINAL ACTION LOGIC ***
+
+    if (nextActions.length === 0 && !launch_ready) {
+      // Default action if the AI returns no suggestions but still needs info
+
+      nextActions = ["Continue Setup", "Review Settings"];
+    }
+
+    // ⭐ EDGE CASE: If the AI returns a 'select' action, ensure it's visually distinct and relevant.
+
+    if (mailbox_selection?.length > 0) {
+      nextActions = ["Confirm Selection"];
     }
 
     setEditor(nextEditor);
 
     setChat((prev) => [...prev, { role: "ai", text: finalResponse }]);
 
+    // ⭐ CONDITIONAL TTS: Only speak if the input was from the mic
+
+    if (isVoiceInput) {
+      speakAiResponse(finalResponse);
+    }
+
     setDynamicQuickActions(nextActions);
   };
 
-  const sendMessage = (text, userTextOverride = text) => {
+  const sendMessage = (text, userTextOverride = text, isVoiceInput = false) => {
     if (!text.trim()) return;
+
+    // ⭐ EDGE CASE FIX: Custom logic for Confirm Selection button
+
+    if (text === "Confirm Selection") {
+      const selectedEmails = AVAILABLE_EMAILS.filter((e) =>
+        editor.mailbox.selected.includes(e.id)
+      ).map((e) => e.email);
+
+      const confirmationText = `I confirm using these emails: ${selectedEmails.join(
+        ", "
+      )}`;
+
+      // Send the structured confirmation to the AI
+
+      setChat((prev) => [...prev, { role: "user", text: confirmationText }]);
+
+      processMessage(confirmationText, isVoiceInput);
+
+      return;
+    }
 
     if (view === "initial") setView("dual");
 
+    // Add user message to chat state BEFORE processing
+
     setChat((prev) => [...prev, { role: "user", text: userTextOverride }]);
 
-    setInput("");
+    if (!isVoiceInput) {
+      setInput("");
+    }
 
-    processMessage(text);
+    // Pass the cleaned text for processing
+
+    processMessage(text, isVoiceInput);
   };
 
   const fillMagicPrompt = () => {
     setTokenizedMode(true);
+
     setPromptTokens(PROMPT_TOKENS.map((t) => ({ ...t, value: null })));
 
     setEditingTokenKey(PROMPT_TOKENS[0].key);
+
     setInput("");
 
     inputRef.current?.focus();
   };
 
   const handleTokenInput = (userText) => {
-    if (!userText.trim()) return;
+    // ⭐ EDGE CASE FIX: Prevent advancing if text is empty, unless it's the final step
+
+    if (!userText.trim() && !areAllTokensFilled) return;
 
     const updatedTokens = promptTokens.map((token) =>
       token.key === editingTokenKey ? { ...token, value: userText } : token
     );
 
     setPromptTokens(updatedTokens);
+
     setInput("");
 
     const currentTokenIndex = PROMPT_TOKENS.findIndex(
       (t) => t.key === editingTokenKey
     );
+
     const nextToken = updatedTokens.find(
       (t, index) => t.value === null && index > currentTokenIndex
     );
 
     if (nextToken) {
       setEditingTokenKey(nextToken.key);
+
       inputRef.current?.focus();
     } else {
       const finalPrompt = compileMagicPrompt(updatedTokens);
+
       setInput(finalPrompt);
 
       setTokenizedMode(false);
+
       setEditingTokenKey(null);
 
       inputRef.current?.focus();
@@ -609,35 +1108,35 @@ export default function CampaignBuilder() {
     );
 
     setPromptTokens(updatedTokens);
+
     setIsMailboxPickerOpen(false);
 
-    // Advance the tokenized flow manually using the new value
+    // ⭐ FIX: Pass the selected string back to the token input handler
+
     handleTokenInput(selectedStr);
   };
 
   const handleChipClick = (tokenKey, tokenValue) => {
-    // If clicking the Mailbox chip, open the picker
     if (tokenKey === "email") {
-      // Find current selections for the modal initialization
       const initialEmailToken = promptTokens.find((t) => t.key === "email");
+
       const initialEmailSelection = initialEmailToken?.value
         ? initialEmailToken.value.split(", ")
         : [];
 
-      // Set the editing key and open the picker
       setEditingTokenKey(tokenKey);
+
       setIsMailboxPickerOpen(true);
-      // Do not focus the text input field
+
       return;
     }
 
-    // Default handling for text input chips
     if (tokenizedMode || areAllTokensFilled) {
       setEditingTokenKey(tokenKey);
+
       setInput(tokenValue || "");
 
       if (areAllTokensFilled) {
-        // If clicking a chip after completion, return to tokenized mode
         setTokenizedMode(true);
       }
 
@@ -658,22 +1157,31 @@ export default function CampaignBuilder() {
   };
 
   const confirmMailboxSelection = () => {
-    const selectedEmails = AVAILABLE_EMAILS.filter((e) =>
-      editor.mailbox.selected.includes(e.id)
-    ).map((e) => e.email);
+    // ⭐ Reworked to use the single sendMessage path
 
-    if (selectedEmails.length > 0) {
-      sendMessage(`I confirm using these emails: ${selectedEmails.join(", ")}`);
-    }
+    sendMessage("Confirm Selection");
   };
 
-  const showICP = !!editor.icp.goal;
+  const showICP = !!editor.icp.goal || !!editor.icp.role; // Check for any ICP detail
+
   const showCompany = showICP && !!editor.company.url;
+
   const showData = showCompany && !!editor.dataSource.source_type;
+
   const showCadence = showData && !!editor.cadence.steps;
+
   const showMailbox = showCadence;
+
   const showLaunch = showMailbox && editor.mailbox.selected.length > 0;
 
+  if (appView === "editor" && editor.cadence.steps) {
+    return (
+      <SequencePage
+        initialCadenceSteps={editor.cadence.steps}
+        onBack={() => setAppView("builder")}
+      />
+    );
+  }
 
   if (view === "initial") {
     const focusedToken = promptTokens.find((t) => t.key === editingTokenKey);
@@ -689,16 +1197,16 @@ export default function CampaignBuilder() {
       ? focusedToken?.key === "email"
         ? "Click the chip above to select mailboxes..."
         : `Enter ${focusedToken?.label || "details"} ${exampleText}...`
-      : "Describe your campaign goals here...";
+      : "Target CTOs in US SaaS companies to generate 150 leads/month. My site is example.com.";
 
     const initialEmailToken = promptTokens.find((t) => t.key === "email");
+
     const initialEmailSelection = initialEmailToken?.value
       ? initialEmailToken.value.split(", ")
       : [];
 
     return (
-      <div className="flex flex-col items-center p-12 bg-white h-[85vh] relative">
-        {/* Mailbox Picker Modal */}
+      <div className="flex flex-col items-center p-12 bg-gray-50 h-[85vh] relative justify-center">
         <MailboxPickerOverlay
           isOpen={isMailboxPickerOpen}
           onClose={() => setIsMailboxPickerOpen(false)}
@@ -706,131 +1214,110 @@ export default function CampaignBuilder() {
           initialSelection={initialEmailSelection}
         />
 
-        <div className="flex flex-col items-center mb-10">
-          <h1 className="text-4xl font-bold text-[#23272f] mb-2 text-center">
-            Create Your Campaign
-          </h1>
+        {/* --- HEADER --- */}
 
-          <p className="text-[#6b778c] text-center text-lg mb-6">
-            Choose a campaign type or describe what you want to achieve
-          </p>
+        <div className="flex flex-col items-center mb-12 max-w-2xl">
+          <h2 className="text-4xl font-extrabold text-[#23272f] mb-3 text-center tracking-tight">
+            Launch Your AI Campaign Strategy
+          </h2>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 w-full max-w-4xl mb-16">
-          {CAMPAIGN_TYPES.map((type) => (
-            <Card
-              key={type.title}
-              className="cursor-pointer shadow-md hover:shadow-lg transition-shadow border border-[#eaeaea] hover:border-[#e63946] group rounded-xl"
-              onClick={() => sendMessage(`${type.title} for CTOs in SaaS UK`)}
-            >
-              <CardHeader className="p-4">
-                <div className="h-10 w-10 rounded-full bg-[#f3f4f9] flex items-center justify-center mb-3 group-hover:bg-[#e63946] transition-colors">
-                  <type.icon className="h-5 w-5 text-[#e63946] group-hover:text-white" />
-                </div>
+        {/* --- MAIN INTERACTION AREA --- */}
 
-                <CardTitle className="text-base font-bold text-[#23272f]">
-                  {type.title}
-                </CardTitle>
-
-                <p className="text-sm text-[#6b778c]">{type.description}</p>
-              </CardHeader>
-            </Card>
-          ))}
-        </div>
-
-        {/* --- FIXED HERO INPUT AREA --- */}
-
-        <div className="w-full max-w-3xl custom-scrollbar-grey relative group mb-20">
-          {/* Magic Prompt Button (OUTSIDE Top-Right) */}
-
-          <div className="flex justify-end mb-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="text-xs h-8 gap-2 bg-purple-50 border border-purple-100 text-purple-600 hover:bg-purple-100 hover:text-purple-700 transition-all shadow-sm rounded-full"
-              onClick={fillMagicPrompt}
-              style={{ display: tokenizedMode ? "none" : "flex" }}
-            >
-              <Sparkles className="h-3 w-3 fill-purple-600" />
-              Use Magic Prompt
-            </Button>
-          </div>
-
+        <div className="w-full max-w-4xl custom-scrollbar-grey relative group">
           {/* --- 1. CONFIGURATION BOX (CHIPS) --- */}
-          {tokenizedMode && !areAllTokensFilled && (
-            <div className="flex flex-col gap-3 p-5 rounded-t-2xl bg-gray-100 border border-b-0 border-gray-300 shadow-md">
+
+          {tokenizedMode && (
+            <Card className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl shadow-xl mb-4 bg-white">
+              <h3 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                <Zap className="h-4 w-4 text-purple-600" />
+                Campaign Blueprint: Fill in the Blanks
+              </h3>
+
               <div className="flex flex-wrap gap-3">
                 {promptTokens.map((token) => (
                   <div
                     key={token.key}
                     onClick={() => handleChipClick(token.key, token.value)}
                     className={`
-                              flex items-center gap-1 px-3 py-2 text-sm rounded-full transition-all duration-200 cursor-pointer 
-                              shadow-sm 
-                              ${
-                                token.value
-                                  ? "bg-blue-500 text-white font-medium hover:bg-blue-600"
-                                  : "bg-white text-gray-700 border border-gray-300 hover:border-blue-400"
-                              }
-                              ${
-                                editingTokenKey === token.key
-                                  ? "ring-2 ring-offset-2 ring-[#e63946] border-[#e63946] shadow-xl scale-[1.03] z-10"
-                                  : "z-0"
-                              }
-                              ${
-                                token.key === "email" && token.value
-                                  ? "max-w-xs justify-between"
-                                  : ""
-                              }
-                          `}
+
+                    flex items-center gap-2 px-4 py-2 text-sm rounded-full transition-all duration-200 cursor-pointer 
+
+                    shadow-md 
+
+                    ${
+                      token.value
+                        ? "bg-blue-600 text-white font-medium hover:bg-blue-700"
+                        : "bg-gray-100 text-gray-700 border border-gray-300 hover:border-blue-400"
+                    }
+
+                    ${
+                      editingTokenKey === token.key
+                        ? "ring-4 ring-offset-2 ring-blue-300 shadow-2xl scale-[1.05] z-10"
+                        : "z-0"
+                    }
+
+                    `}
                   >
                     {/* Placeholder Chip Label */}
-                    {!token.value && (
-                      <span className="opacity-75">{token.label}:</span>
-                    )}
+
+                    <span className="font-medium opacity-80">
+                      {token.label}:
+                    </span>
 
                     {/* Value Display */}
-                    <span className="font-semibold truncate">
+
+                    <span className="font-semibold truncate max-w-[200px]">
                       {/* Show first email + count if multiple are selected */}
+
                       {token.key === "email" && token.value
                         ? token.value.split(", ").length > 1
                           ? `${token.value.split(", ")[0]} +${
                               token.value.split(", ").length - 1
                             }`
                           : token.value
-                        : token.value || token.placeholder}
+                        : token.value || (
+                            <span className="text-gray-400 font-normal">
+                              {token.placeholder}
+                            </span>
+                          )}
                     </span>
 
                     {/* Dropdown/Check Icon */}
-                    {token.key === "email" && (
+
+                    {token.key === "email" ? (
                       <ChevronDown
-                        className={`h-4 w-4 ml-1 ${
+                        className={`h-4 w-4 ${
                           token.value ? "text-white" : "text-gray-500"
                         }`}
                       />
-                    )}
-                    {token.value && token.key !== "email" && (
-                      <CheckCircle className="h-4 w-4 ml-1" />
+                    ) : token.value ? (
+                      <CheckCircle className="h-4 w-4 ml-1 text-green-300" />
+                    ) : (
+                      <Edit className="h-4 w-4 ml-1 text-gray-400" />
                     )}
                   </div>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
+
           {/* --- END CONFIGURATION BOX --- */}
 
           {/* --- 2. ACTION BOX (INPUT) --- */}
+
           <div
-            className={`relative bg-white rounded-b-2xl shadow-xl 
-                        ${
-                          tokenizedMode && !areAllTokensFilled
-                            ? "border border-[#e63946] rounded-t-none"
-                            : "border border-gray-200 rounded-2xl"
-                        }`}
+            className={`relative bg-white shadow-2xl rounded-2xl transition-all duration-300
+
+              ${
+                tokenizedMode
+                  ? "border-2 border-blue-400"
+                  : "border-2 border-gray-200 hover:border-gray-400"
+              }`}
           >
             <textarea
               ref={inputRef}
-              className="w-full min-h-[120px] p-6 pb-16 text-lg text-gray-700 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed"
+              className="w-full min-h-[140px] p-6 pb-20 text-lg text-gray-800 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl"
               placeholder={currentPlaceholder}
               value={input}
               onChange={(e) => {
@@ -846,9 +1333,8 @@ export default function CampaignBuilder() {
                   e.preventDefault();
 
                   if (tokenizedMode && !areAllTokensFilled) {
-                    // If editing email chip, open picker on Enter press
                     if (editingTokenKey === "email") {
-                      handleChipClick("email", null); // Re-open picker
+                      handleChipClick("email", null);
                     } else {
                       handleTokenInput(input);
                     }
@@ -857,13 +1343,12 @@ export default function CampaignBuilder() {
                   }
                 }
               }}
-              // When email chip is focused, the text input should be disabled (forcing modal interaction)
               disabled={tokenizedMode && editingTokenKey === "email"}
             />
 
-            {/* Bottom Actions Bar (Pinned Inside) */}
+            {/* Bottom Actions Bar (Pinned Inside) - Re-styled for clarity */}
 
-            <div className="absolute bottom-3 left-4 right-4 flex items-center justify-between bg-white/80 backdrop-blur-sm pt-2">
+            <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between bg-white/80 backdrop-blur-sm pt-2 border-t border-gray-100">
               <div className="flex items-center gap-2">
                 <input
                   type="file"
@@ -875,7 +1360,7 @@ export default function CampaignBuilder() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="rounded-full h-9 w-9 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  className="rounded-full h-10 w-10 text-gray-500 hover:text-red-500 hover:bg-red-50"
                   onClick={() => fileInputRef.current.click()}
                 >
                   <Paperclip className="h-5 w-5" />
@@ -885,63 +1370,81 @@ export default function CampaignBuilder() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="rounded-full h-9 w-9 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  className={`rounded-full h-10 w-10 text-gray-500 hover:text-red-500 hover:bg-red-50 ${
+                    isListening ? "bg-red-100 text-red-600 animate-pulse" : ""
+                  }`}
+                  onClick={startSpeechToText}
+                  disabled={isLoading || isListening}
                 >
-                  <Mic className="h-5 w-5" />
+                  {isListening ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
                 </Button>
               </div>
 
-              {/* The regular Send Button now handles both token input and final send */}
+              {/* Send Button */}
+
               <Button
                 type="button"
                 size="icon"
-                className="bg-[#e63946] text-white rounded-full h-10 w-10 hover:bg-red-700 shadow-md transition-transform active:scale-95"
-                // If tokenized mode is active (and tokens aren't filled yet), use the token handler (unless it's the email chip)
+                className="bg-[#e63946] text-white rounded-full h-12 w-12 hover:bg-red-700 shadow-xl transition-transform active:scale-95"
                 onClick={() => {
                   if (tokenizedMode && !areAllTokensFilled) {
                     if (editingTokenKey === "email") {
-                      handleChipClick("email", null); // Open picker
+                      handleChipClick("email", null);
                     } else {
-                      handleTokenInput(input); // Send text input
+                      handleTokenInput(input);
                     }
                   } else {
-                    sendMessage(input); // Final send
+                    sendMessage(input);
                   }
                 }}
-                // Highlight button based on action
                 style={
                   tokenizedMode && editingTokenKey === "email"
-                    ? { backgroundColor: "#2563eb" }
+                    ? {
+                        backgroundColor: "#2563eb",
+
+                        boxShadow: "0 4px 10px rgba(37, 99, 235, 0.4)",
+                      }
                     : {}
                 }
               >
                 {tokenizedMode && editingTokenKey === "email" ? (
-                  <Mail className="h-5 w-5" /> // Show Mail icon when focusing email chip
+                  <Mail className="h-6 w-6" />
                 ) : (
-                  <Send className="h-5 w-5" />
+                  <Send className="h-6 w-6" />
                 )}
               </Button>
             </div>
           </div>
+
           {/* --- END ACTION BOX --- */}
 
-          {/* Helper text if Magic Prompt is used */}
+          {/* Helper text */}
 
-          {tokenizedMode && !areAllTokensFilled && (
-            <p className="text-xs text-purple-600 mt-2 ml-2 animate-pulse font-medium">
-              {editingTokenKey === "email"
-                ? "* Click the **Sender Email** chip or the blue mail icon to select mailboxes."
-                : `* Enter the value for the **${
-                    focusedToken?.label || "field"
-                  }** and press Enter, or click a chip to edit it.`}
+          {tokenizedMode && !areAllTokensFilled && focusedToken && (
+            <p className="text-sm text-blue-600 mt-3 ml-2 animate-pulse font-medium flex items-center gap-2">
+              {editingTokenKey === "email" ? (
+                <>
+                  <Mail className="h-4 w-4" /> Click the **Sender Email** chip
+                  or the blue mail icon to select mailboxes.
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4" /> Enter the value for **
+                  {focusedToken.label}** and press Enter, or click a chip to
+                  edit it.
+                </>
+              )}
             </p>
           )}
 
-          {/* New helper text when prompt is compiled and ready to send */}
           {!tokenizedMode && areAllTokensFilled && (
-            <p className="text-xs text-green-600 mt-2 ml-2 font-medium">
-              ✨ **Ready to Launch!** Review the compiled prompt above and click
-              the Send button to generate your campaign.
+            <p className="text-sm text-green-600 mt-3 ml-2 font-medium flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" /> **Ready!** Review the compiled
+              prompt and click Send to generate your campaign.
             </p>
           )}
         </div>
@@ -949,10 +1452,10 @@ export default function CampaignBuilder() {
     );
   }
 
-  // --- RENDER: DUAL VIEW (Omitted for brevity) ---
+  // --- RENDER: DUAL VIEW ---
+
   return (
     <div className="flex h-[95vh] w-full bg-white overflow-hidden custom-scrollbar-red-600">
-      {/* ... Dual View JSX ... */}
       <div className="flex-[6] relative flex flex-col items-center bg-white border-r border-[#eaeaea] min-w-[500px] max-w-[60%]">
         <div className="w-full flex items-center gap-2 p-4 border-b border-[#f3f4f9]">
           <div className="h-8 w-8 rounded-full bg-[#e63946] flex items-center justify-center">
@@ -963,7 +1466,20 @@ export default function CampaignBuilder() {
             AI Campaign Assistant
           </span>
 
-          <span className="ml-auto text-xs text-green-600">AI Active</span>
+          {/* TTS Status/Stop Button */}
+
+          {isSpeaking ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto text-xs text-red-600 bg-red-100 hover:bg-red-200"
+              onClick={stopSpeech}
+            >
+              <Volume2 className="h-4 w-4 mr-1 animate-pulse" /> Stop Speaking
+            </Button>
+          ) : (
+            <span className="ml-auto text-xs text-green-600">AI Active</span>
+          )}
         </div>
 
         <div className="flex-1 w-full flex flex-col overflow-y-auto px-6 pt-4">
@@ -986,6 +1502,8 @@ export default function CampaignBuilder() {
             </div>
           ))}
 
+          {/* VITAL FIX: Hide "Thinking..." while loading */}
+
           {isLoading && (
             <div className="mb-4 flex justify-start">
               <div className="bg-[#f6f7fa] rounded-xl px-4 py-2 text-[#23272f] flex items-center gap-2">
@@ -994,12 +1512,22 @@ export default function CampaignBuilder() {
             </div>
           )}
 
-          {dynamicQuickActions.length > 0 && (
+          {/* VITAL FIX: Only show quick actions if the array has content AND the page is not loading */}
+
+          {dynamicQuickActions.length > 0 && !isLoading && (
             <div className="flex gap-2 my-2 flex-wrap">
               {dynamicQuickActions.map((action, index) => (
                 <button
                   key={index}
-                  className="px-4 py-1 rounded-full text-xs font-semibold shadow-sm hover:opacity-80 transition bg-[#e63946] text-white"
+                  // ⭐ EDGE CASE: Style the confirm button differently
+
+                  className={`px-4 py-1 rounded-full text-xs font-semibold shadow-sm hover:opacity-80 transition 
+
+                    ${
+                      action === "Confirm Selection"
+                        ? "bg-green-600 text-white"
+                        : "bg-[#e63946] text-white"
+                    }`}
                   onClick={() => sendMessage(action)}
                 >
                   {action}
@@ -1040,13 +1568,25 @@ export default function CampaignBuilder() {
                 <Paperclip className="h-4 w-4" />
               </Button>
 
+              {/* STT Button (Mic) */}
+
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="rounded-full text-gray-400 hover:text-gray-600"
+                className={`rounded-full ${
+                  isListening
+                    ? "text-red-600 bg-red-100 animate-pulse"
+                    : "text-gray-400 hover:text-gray-600"
+                }`}
+                onClick={startSpeechToText}
+                disabled={isLoading || isListening}
               >
-                <Mic className="h-4 w-4" />
+                {isListening ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
               </Button>
 
               <Button
@@ -1062,7 +1602,6 @@ export default function CampaignBuilder() {
         </div>
       </div>
 
-      
       <div className="flex-[4] px-8 py-4 overflow-y-auto">
         <div className="flex items-center justify-between mb-4 border-b pb-2">
           <span className="font-bold text-lg text-[#23272f]">
@@ -1071,7 +1610,9 @@ export default function CampaignBuilder() {
 
           <Button
             className="bg-[#e63946] text-white px-6 rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400"
-            disabled={!editor.launch?.status}
+            disabled={
+              !editor.launch?.status || editor.launch?.status !== "Ready"
+            }
           >
             Launch Campaign
           </Button>
@@ -1083,6 +1624,7 @@ export default function CampaignBuilder() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-[#e63946]" />
+
                   <CardTitle className="text-base font-semibold text-[#23272f]">
                     Ideal Customer Profile
                   </CardTitle>
@@ -1101,6 +1643,7 @@ export default function CampaignBuilder() {
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Goal
                   </span>
+
                   {editor.icp.goal}
                 </div>
 
@@ -1108,20 +1651,23 @@ export default function CampaignBuilder() {
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Role
                   </span>
+
                   {editor.icp.role}
                 </div>
 
                 <div>
                   <span className="font-medium block text-xs text-[#6b778c]">
-                    Objective
+                    Industry
                   </span>
-                  {editor.icp.objective || "Not defined"}
+
+                  {editor.icp.industry}
                 </div>
 
                 <div>
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Location
                   </span>
+
                   {editor.icp.location}
                 </div>
               </CardContent>
@@ -1133,6 +1679,7 @@ export default function CampaignBuilder() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Database className="h-5 w-5 text-[#e63946]" />
+
                   <CardTitle className="text-base font-semibold text-[#23272f]">
                     Company Profile
                   </CardTitle>
@@ -1151,6 +1698,7 @@ export default function CampaignBuilder() {
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Website
                   </span>
+
                   {editor.company.url}
                 </div>
 
@@ -1158,6 +1706,7 @@ export default function CampaignBuilder() {
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Value Proposition
                   </span>
+
                   {editor.company.value_prop}
                 </div>
 
@@ -1165,6 +1714,7 @@ export default function CampaignBuilder() {
                   <span className="font-medium block text-xs text-[#6b778c]">
                     Pain Points
                   </span>
+
                   {editor.company.pain_points}
                 </div>
               </CardContent>
@@ -1176,6 +1726,7 @@ export default function CampaignBuilder() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Paperclip className="h-5 w-5 text-[#e63946]" />
+
                   <CardTitle className="text-base font-semibold text-[#23272f]">
                     Data Source: {editor.dataSource.source_type}
                   </CardTitle>
@@ -1230,6 +1781,7 @@ export default function CampaignBuilder() {
                     <thead className="bg-gray-50 text-gray-500">
                       <tr>
                         <th className="p-2">Name</th>
+
                         <th className="p-2">Job</th>
                       </tr>
                     </thead>
@@ -1238,6 +1790,7 @@ export default function CampaignBuilder() {
                       {editor.dataSource.dummyData?.map((lead, i) => (
                         <tr key={i}>
                           <td className="p-2">{lead.name}</td>
+
                           <td className="p-2">{lead.job}</td>
                         </tr>
                       ))}
@@ -1263,6 +1816,7 @@ export default function CampaignBuilder() {
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Zap className="h-5 w-5 text-[#e63946]" />
+
                   <CardTitle className="text-base font-semibold text-[#23272f]">
                     Sales Cadence
                   </CardTitle>
@@ -1271,6 +1825,7 @@ export default function CampaignBuilder() {
                 <Button
                   variant="ghost"
                   className="text-xs px-2 h-7 text-[#e63946]"
+                  onClick={() => setAppView("editor")}
                 >
                   <Edit className="h-3 w-3 mr-1" /> Edit
                 </Button>
@@ -1298,10 +1853,11 @@ export default function CampaignBuilder() {
           )}
 
           {showMailbox && (
-            <Card className="rounded-lg shadow border border-[#eaeaea] bg-white animate-in fade-in slide-in-from-bottom-2 border-l-4 border-l-[#e63946]">
+            <Card className="rounded-lg  bg-white animate-in fade-in slide-in-from-bottom-2 border-l-4  ">
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Mail className="h-5 w-5 text-[#e63946]" />
+
                   <CardTitle className="text-base font-semibold text-[#23272f]">
                     Mailbox Setup
                   </CardTitle>
@@ -1323,38 +1879,47 @@ export default function CampaignBuilder() {
                 </div>
               </CardHeader>
 
-              <CardContent className="px-4 pb-4 space-y-2">
-                {AVAILABLE_EMAILS.map((mail) => (
-                  <div
-                    key={mail.id}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      editor.mailbox.selected.includes(mail.id)
-                        ? "bg-red-50 border-red-200"
-                        : "bg-white border-gray-100"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Checkbox
-                        checked={editor.mailbox.selected.includes(mail.id)}
-                        onCheckedChange={() => toggleMailbox(mail.id)}
-                      />
+              <div className="h-[40vh] overflow-auto custom-scrollbar-grey">
+                <CardContent className="px-4 pb-4 space-y-2">
+                  {AVAILABLE_EMAILS.map((mail) => (
+                    <div
+                      key={mail.id}
+                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors
 
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {mail.email}
-                        </p>
-                        <span className="text-xs text-gray-400">
-                          {mail.provider}
-                        </span>
+                        ${
+                          editor.mailbox.selected.includes(mail.id)
+                            ? "bg-red-50 border-red-200"
+                            : "bg-white border-gray-100"
+                        }`}
+                      onClick={() => toggleMailbox(mail.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={editor.mailbox.selected.includes(mail.id)}
+                          // onClick removed, using div click handler
+
+                          onCheckedChange={() => toggleMailbox(mail.id)}
+                          className="data-[state=checked]:bg-[#e63946] data-[state=checked]:border-[#e63946]"
+                        />
+
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {mail.email}
+                          </p>
+
+                          <span className="text-xs text-gray-400">
+                            {mail.provider}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    {editor.mailbox.selected.includes(mail.id) && (
-                      <CheckCircle className="h-4 w-4 text-[#e63946]" />
-                    )}
-                  </div>
-                ))}
-              </CardContent>
+                      {editor.mailbox.selected.includes(mail.id) && (
+                        <CheckCircle className="h-4 w-4 text-[#e63946]" />
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </div>
             </Card>
           )}
 
@@ -1362,11 +1927,11 @@ export default function CampaignBuilder() {
             <div className="text-center py-10 text-gray-500">
               <Users className="h-8 w-8 mx-auto mb-2 text-[#e63946] opacity-75" />
 
-              <p>Start chatting to define your **Ideal Customer Profile**!</p>
+              <p>Start chatting to define your Ideal Customer Profile!</p>
             </div>
           )}
         </div>
-        </div>
+      </div>
     </div>
   );
 }
