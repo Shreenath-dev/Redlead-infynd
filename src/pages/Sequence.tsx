@@ -17,7 +17,7 @@ import ReactFlow, {
   Handle,
   Position,
   ReactFlowInstance,
-} from "reactflow";
+} from "@xyflow/react";
 import {
   Mail,
   Phone,
@@ -32,10 +32,8 @@ import {
   Trash2,
   Edit,
 } from "lucide-react";
-import "reactflow/dist/style.css";
+import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
-
-// --- 1. Dagre Layout Calculation (Unchanged) ---
 
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
