@@ -1213,7 +1213,7 @@ export default function CampaignBuilder() {
           onSave={handleMailboxSave}
           initialSelection={initialEmailSelection}
         />
-        
+
         <div
           className="flex flex-col items-center mb-8 max-w-2xl 
                 animate-in fade-in slide-in-from-top-10 duration-1000"
@@ -1224,11 +1224,9 @@ export default function CampaignBuilder() {
           >
             Hello, <span className="text-gray-800">Shreenath</span>
           </h2>
-          
         </div>
         {/* --- MAIN INTERACTION AREA --- */}
         <div className="w-full max-w-4xl custom-scrollbar-grey relative mb-20 group">
-
           {tokenizedMode && (
             <Card className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl shadow-xl mb-4 bg-white">
               <h3 className="text-base font-semibold text-gray-700 mb-4 flex items-center gap-2">
@@ -1309,7 +1307,7 @@ export default function CampaignBuilder() {
           {/* --- 2. ACTION BOX (INPUT) --- */}
 
           <div
-            className={`relative bg-white w-[100vh] h-[16vh] shadow-2xl rounded-2xl transition-all duration-300
+            className={`relative bg-white w-full max-w-4xl shadow-2xl rounded-2xl h-auto  transition-all duration-300
 
               ${
                 tokenizedMode
@@ -1319,7 +1317,10 @@ export default function CampaignBuilder() {
           >
             <textarea
               ref={inputRef}
-              className="w-full min-h-[140px] p-6 pb-20 text-lg text-gray-800 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl"
+              className="w-full 
+    h-auto 
+    p-6 pb-20 text-lg text-gray-800 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl 
+    overflow-y-auto"
               placeholder={currentPlaceholder}
               value={input}
               onChange={(e) => {
@@ -1350,7 +1351,7 @@ export default function CampaignBuilder() {
 
             {/* Bottom Actions Bar (Pinned Inside) - Re-styled for clarity */}
 
-            <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between bg-white/80 backdrop-blur-sm pt-2 border-t border-gray-100">
+            <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between sm:h-15 bg-white/80 backdrop-blur-sm pt-2 border-t border-gray-100">
               <div className="flex items-center gap-2">
                 <input
                   type="file"
