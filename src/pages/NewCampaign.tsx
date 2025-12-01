@@ -459,11 +459,7 @@ export default function CampaignBuilder() {
   const [view, setView] = useState("initial");
 
   const [chat, setChat] = useState([
-    {
-      role: "ai",
-
-      text: `Hello! I'm your AI Campaign Architect. You can start by describing your goals, e.g., **"I need to target CFOs in Financial Services in the UK to generate 100 meetings this quarter. My website is example.com, leads are in HubSpot."**`,
-    },
+    
   ]);
 
   const [input, setInput] = useState("");
