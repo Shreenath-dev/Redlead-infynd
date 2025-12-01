@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect } from "react";
-import  {
+import {
   ReactFlow,
   addEdge,
   applyNodeChanges,
@@ -10,7 +10,6 @@ import  {
   OnEdgesChange,
   OnConnect,
   Controls,
-  Panel,
   ReactFlowProvider,
   useReactFlow,
   useUpdateNodeInternals,
@@ -30,11 +29,12 @@ import {
   ChevronLeft,
   Minus,
   Plus,
-  Trash2,
   Edit,
 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import dagre from "dagre";
+
+// --- 1. Layouting Setup (Dagre) ---
 
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
@@ -117,6 +117,10 @@ const StepNode: React.FC<any> = ({ id, data, selected }) => {
   const [localWaitDays, setLocalWaitDays] = useState(
     data.waitDays === "immediate" ? 0 : data.waitDays
   );
+
+  useEffect(() => {
+    setLocalWaitDays(data.waitDays === "immediate" ? 0 : data.waitDays);
+  }, [data.waitDays]);
 
   const commitWaitTime = (newWaitDays: number) => {
     const days = Math.max(0, newWaitDays);
@@ -224,7 +228,7 @@ const StepNode: React.FC<any> = ({ id, data, selected }) => {
   return (
     <div
       className={`
-      p-4 shadow-lg rounded-xl border-2 min-w-[250px] bg-white
+      p-4 shadow-lg  rounded-xl border-2 min-w-[250px] bg-white
       ${selected ? "border-red-500" : "border-gray-200"}
       transition duration-200 ease-in-out hover:shadow-xl hover:border-red-400
     `}
@@ -312,7 +316,7 @@ const nodeTypes = {
   stepNode: StepNode,
 };
 
-// --- 3. Dynamic Flow Generation Utility (Enhanced for Sequential Days) ---
+// --- 3. Dynamic Flow Generation Utility (REMAINS THE SAME) ---
 
 const parseStepsToFlow = (
   stepsText: string,
@@ -334,7 +338,6 @@ const parseStepsToFlow = (
   let lastNodeId: string | null = null;
   let previousDay = 0;
 
-  // 1. Start Node
   const startNodeId = `${nodeIdCounter++}`;
   initialNodes.push({
     id: startNodeId,
@@ -344,10 +347,7 @@ const parseStepsToFlow = (
   });
   lastNodeId = startNodeId;
 
-  // CRITICAL FIX: Use regex to reliably split by "Day X:" pattern and capture the action.
   const stepRegex = /(Day\s+\d+:\s*[^,;]+)/g;
-
-  // Get all explicit Day steps. This handles the comma-separated or long string formats.
   const stepsArray = stepsText.match(stepRegex) || [];
 
   for (let i = 0; i < stepsArray.length; i++) {
@@ -355,20 +355,22 @@ const parseStepsToFlow = (
     const currentNodeId = `${nodeIdCounter++}`;
     const lowerText = stepText.toLowerCase();
 
-    // --- Calculate Day/Wait Time ---
     const dayMatch = stepText.match(/Day\s+(\d+):/i);
-    const currentDay = dayMatch ? parseInt(dayMatch[1], 10) : previousDay + 1; // Default to next day if parsing fails
+    const currentDay = dayMatch ? parseInt(dayMatch[1], 10) : previousDay + 1;
 
     let waitDays: number | "immediate";
-    if (i === 0) {
-      waitDays = "immediate";
-    } else {
-      // Calculate wait time: difference between current day number and previous day number
-      waitDays = Math.max(1, currentDay - previousDay);
-    }
-    previousDay = currentDay; // Update tracker for the next iteration
 
-    // --- Determine Action Type and Label ---
+    if (i === 0 && currentDay === 1) {
+      waitDays = "immediate";
+      previousDay = currentDay;
+    } else if (i === 0 && currentDay > 1) {
+      waitDays = currentDay;
+      previousDay = currentDay;
+    } else {
+      waitDays = Math.max(1, currentDay - previousDay);
+      previousDay = currentDay;
+    }
+
     let type: SequenceNodeData["type"] = "email";
     let label = "Action";
 
@@ -387,7 +389,6 @@ const parseStepsToFlow = (
         : "LinkedIn Connect";
     }
 
-    // --- Create Node and Edge ---
     const newNode: Node<SequenceNodeData> = {
       id: currentNodeId,
       type: "stepNode",
@@ -417,9 +418,7 @@ const parseStepsToFlow = (
     initialNodes.push(newNode);
     lastNodeId = currentNodeId;
 
-    // Break early if we encounter a conditional step in the future (simplified for this parser)
     if (lowerText.includes("if") || lowerText.includes("else")) {
-      // In a simplified parser, we treat the rest as a simple linear flow starting from here.
       break;
     }
   }
@@ -427,11 +426,9 @@ const parseStepsToFlow = (
   return getLayoutedElements(initialNodes, initialEdges);
 };
 
-// --- 4. Main Component Integration (Flow, SequencePage, etc. remain the same) ---
 
 const Flow = ({
   flowElements,
-  initialFitView,
 }: {
   flowElements: { nodes: Node<SequenceNodeData>[]; edges: Edge[] };
   initialFitView: boolean;
@@ -502,6 +499,49 @@ const Flow = ({
       const type = event.dataTransfer.getData("application/reactflow");
       if (typeof type === "undefined" || !type) return;
 
+      const supportedTypes: SequenceNodeData["type"][] = [
+        "email",
+        "call",
+        "linkedin",
+        "wait",
+        "condition",
+      ];
+
+      if (!supportedTypes.includes(type as SequenceNodeData["type"])) {
+        // Handle mock/unsupported types from the large modal
+        const labelMap: { [key: string]: string } = {
+          whatsapp: "WhatsApp Message",
+          chat: "Chat Message",
+          voice: "Voice Message",
+          aivoice: "AI Voice Message",
+          invite: "LinkedIn Invitation",
+          visit: "Visit Profile",
+          manual: "Manual Task",
+          api: "Call API",
+          campaign: "Send to Campaign",
+          "ai-variable": "AI Variable",
+        };
+        const defaultType: SequenceNodeData["type"] = "email"; // Fallback to 'email' visual type
+        const defaultLabel =
+          labelMap[type] ||
+          `${type.charAt(0).toUpperCase() + type.slice(1)} Action`;
+
+        const newNode: Node<SequenceNodeData> = {
+          id: `node-${Date.now()}`,
+          type: "stepNode",
+          position: { x: 0, y: 0 },
+          data: {
+            label: defaultLabel,
+            type: defaultType,
+            details: `(Mock step: ${type})`,
+            waitDays: 1,
+          } as SequenceNodeData,
+        };
+        const newNodes = nodes.concat(newNode);
+        enforceLayout(newNodes, edges);
+        return;
+      }
+
       const newNode: Node<SequenceNodeData> = {
         id: `node-${Date.now()}`,
         type: "stepNode",
@@ -534,141 +574,412 @@ const Flow = ({
   }, []);
 
   return (
-    <div className="flex flex-col flex-grow">
-      <div
-        className="flex-grow h-full min-h-0 bg-white border-l border-gray-200"
-        onDrop={onDrop}
-        onDragOver={onDragOver}
+    <div
+      className="flex-grow h-full min-h-0 bg-white border-l w-full"
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        fitView
+        proOptions={{ hideAttribution: true }}
+        onInit={onInit}
       >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          nodeTypes={nodeTypes}
-          fitView
-          proOptions={{ hideAttribution: true }}
-          onInit={onInit}
-        >
-          <Background variant="dots" gap={16} size={1} className="bg-gray-50" />
-          <Controls className="bg-white rounded-lg shadow-md border border-gray-100" />
-          <Panel position="top-right" className="flex items-center space-x-2">
-            <h2 className="text-xl font-semibold text-gray-800 mr-4">
-              Sales Cadence Sequence
-            </h2>
-            <button className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition border">
-              🔍
-            </button>
-          </Panel>
-        </ReactFlow>
-      </div>
+        <Background variant="dots" gap={16} size={1} className="bg-gray-50" />
+        <Controls className="bg-white rounded-lg shadow-md border border-gray-100" />
+      </ReactFlow>
     </div>
   );
 };
 
-// --- 5. Sidebar and Provider Wrapper (Unchanged) ---
 
-interface SidebarItemProps {
+interface ModalItemProps {
   icon: React.ElementType;
   label: string;
-  nodeType: SequenceNodeData["type"];
-  tailwindColor: string;
+  subLabel?: string;
+  nodeType: string;
+  color?: string;
+  badge?: string;
+  isLocked?: boolean;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({
+const ModalItem: React.FC<ModalItemProps> = ({
   icon: Icon,
   label,
+  subLabel,
   nodeType,
-  tailwindColor,
+  color = "text-gray-700",
+  badge,
+  isLocked,
 }) => {
+  // Steps are draggable for flow building. Conditions are intended to be added on click.
+  const isActionStep = nodeType.startsWith("step-") && !isLocked;
+  const isCondition = nodeType.startsWith("condition-") && !isLocked;
+
+  const borderClass = isActionStep
+    ? "border-gray-200 hover:border-red-400"
+    : "border-gray-200";
+  const bgClass =
+    isActionStep || isCondition ? "bg-white hover:bg-gray-50" : "bg-gray-50";
+  // The cursor is grab for steps (draggable) and pointer for conditions (clickable)
+  const cursorClass = isActionStep
+    ? "cursor-grab"
+    : isCondition
+    ? "cursor-pointer"
+    : "cursor-default opacity-80";
+
   const onDragStart = (event: React.DragEvent) => {
-    event.dataTransfer.setData("application/reactflow", nodeType);
-    event.dataTransfer.effectAllowed = "move";
+    if (isActionStep) {
+      const simpleNodeType = nodeType.replace("step-", "");
+      event.dataTransfer.setData("application/reactflow", simpleNodeType);
+      event.dataTransfer.effectAllowed = "move";
+    } else {
+      event.preventDefault();
+    }
+  };
+
+  const PlaceholderIcon = () => (
+    <div
+      className={`p-1.5 rounded-full border-2 ${color.replace(
+        "text-",
+        "border-"
+      )} ${bgClass}`}
+    >
+      <Icon className={`h-5 w-5 ${color}`} />
+    </div>
+  );
+
+  const dragProps = isActionStep ? { onDragStart, draggable: true } : {};
+
+  const handleItemClick = () => {
+    // Logic for CONDITIONS: If it's a condition, it should trigger adding a conditional node
+    if (isCondition) {
+      // This simulates adding a 'condition' node type to the flow via click
+      const conditionType = nodeType.replace("condition-", "");
+      alert(`Simulating adding a Condition node: ${conditionType}`);
+    }
   };
 
   return (
     <div
-      className={`flex items-center space-x-3 p-3 text-sm font-medium rounded-lg cursor-grab bg-gray-50 hover:bg-white border border-gray-200 shadow-sm transition-all duration-150 
-            ${tailwindColor}`}
-      onDragStart={onDragStart}
-      draggable
+      className={`relative flex flex-col items-center justify-center p-3 text-center min-h-[90px] rounded-lg border ${borderClass} transition-all duration-150 ${cursorClass}`}
+      onClick={handleItemClick}
+      {...dragProps}
     >
-      <Icon className="h-5 w-5" />
-      <span>{label}</span>
+      <div
+        className={`absolute top-0 right-0 m-1 text-xs font-semibold ${
+          isLocked ? "text-gray-500" : "text-red-500"
+        }`}
+      >
+        {badge}
+      </div>
+
+      {/* Icon Area */}
+      <PlaceholderIcon />
+
+      {/* Label and Sub-label */}
+      <span className="mt-1 text-sm font-medium text-gray-800 leading-tight">
+        {label}
+      </span>
+      <span className="text-xs text-gray-500 block leading-snug">
+        {subLabel}
+      </span>
+
+      {/* Lock Overlay */}
+      {isLocked && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70 rounded-lg">
+          <span className="text-red-500 font-bold flex items-center">
+            <span className="mr-1">🔒</span> Unlock
+          </span>
+        </div>
+      )}
     </div>
   );
 };
 
-const Sidebar: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
-  isOpen,
-  onClose,
-}) => {
+const StepsContent: React.FC = () => (
+  <div className="space-y-6">
+    <h3 className="text-xs font-extrabold uppercase text-gray-500">
+      Automatic Steps
+    </h3>
+    <div className="grid grid-cols-4 gap-3">
+      <ModalItem
+        icon={Mail}
+        label="Email"
+        subLabel="Send automatic email"
+        nodeType="step-email"
+        color="text-green-600"
+      />
+      <ModalItem
+        icon={Clock}
+        label="WhatsApp"
+        subLabel="Send WhatsApp message"
+        nodeType="step-whatsapp"
+        color="text-green-500"
+        badge="Beta"
+        isLocked={true}
+      />
+      <ModalItem
+        icon={Link}
+        label="Chat message"
+        subLabel="Send on LinkedIn"
+        nodeType="step-chat"
+        color="text-blue-600"
+      />
+      <div className="col-span-1"></div>
+
+      <ModalItem
+        icon={Phone}
+        label="Voice message"
+        subLabel="Send on LinkedIn"
+        nodeType="step-voice"
+        color="text-blue-600"
+      />
+      <ModalItem
+        icon={GitBranch}
+        label="AI Voice message"
+        subLabel="Send on LinkedIn"
+        nodeType="step-aivoice"
+        color="text-pink-600"
+      />
+      <ModalItem
+        icon={Plus}
+        label="Invitation"
+        subLabel="Send on LinkedIn"
+        nodeType="step-invite"
+        color="text-blue-600"
+      />
+      <ModalItem
+        icon={PenTool}
+        label="Visit profile"
+        subLabel="Visit profile"
+        nodeType="step-visit"
+        color="text-blue-600"
+      />
+    </div>
+
+    <h3 className="text-xs font-extrabold uppercase text-gray-500 pt-3 border-t border-gray-100">
+      Manual execution
+    </h3>
+    <div className="grid grid-cols-4 gap-3">
+      <ModalItem
+        icon={Phone}
+        label="Call"
+        subLabel="Create a task"
+        nodeType="step-call"
+        color="text-red-600"
+      />
+      <ModalItem
+        icon={PenTool}
+        label="Manual task"
+        subLabel="Create a task"
+        nodeType="step-manual"
+        color="text-red-600"
+      />
+    </div>
+
+    <h3 className="text-xs font-extrabold uppercase text-gray-500 pt-3 border-t border-gray-100">
+      Other steps
+    </h3>
+    <div className="grid grid-cols-4 gap-3">
+      <ModalItem
+        icon={GitBranch}
+        label="Call an API"
+        subLabel="Call an API"
+        nodeType="step-api"
+        color="text-gray-600"
+      />
+      <ModalItem
+        icon={Clock}
+        label="Send to another campaign"
+        subLabel="Send to another campaign"
+        nodeType="step-campaign"
+        color="text-gray-600"
+      />
+    </div>
+
+    <h3 className="text-xs font-extrabold uppercase text-gray-500 pt-3 border-t border-gray-100">
+      AI step
+    </h3>
+    <div className="grid grid-cols-4 gap-3">
+      <ModalItem
+        icon={GitBranch}
+        label="AI variable"
+        subLabel="Automatically fill a variable"
+        nodeType="step-ai-variable"
+        color="text-red-500"
+      />
+    </div>
+  </div>
+);
+
+const ConditionsContent: React.FC = () => (
+  <div className="space-y-6">
+    <h3 className="text-xs font-extrabold uppercase text-gray-500">
+      Lead information
+    </h3>
+    <div className="grid grid-cols-3 gap-3">
+      <ModalItem
+        icon={GitBranch}
+        label="Has email address"
+        nodeType="condition-email-exists"
+      />
+      <ModalItem
+        icon={Link}
+        label="Has LinkedIn URL"
+        subLabel="LinkedIn"
+        nodeType="condition-linkedin-url"
+        color="text-blue-600"
+      />
+      <ModalItem
+        icon={PenTool}
+        label="Custom condition"
+        nodeType="condition-custom"
+      />
+    </div>
+
+    <h3 className="text-xs font-extrabold uppercase text-gray-500 pt-3 border-t border-gray-100">
+      Lead actions
+    </h3>
+    <div className="grid grid-cols-4 gap-3">
+      <ModalItem
+        icon={Mail}
+        label="Opened email"
+        nodeType="condition-email-opened"
+        color="text-green-600"
+      />
+      <ModalItem
+        icon={Link}
+        label="Clicked on link in email"
+        nodeType="condition-link-clicked"
+        color="text-green-600"
+      />
+      <ModalItem
+        icon={X}
+        label="Unsubscribe from email"
+        nodeType="condition-unsubscribed"
+        color="text-red-600"
+      />
+      <ModalItem
+        icon={Clock}
+        label="Booked a meeting"
+        subLabel="lemcal"
+        nodeType="condition-booked-meeting"
+        color="text-red-600"
+      />
+
+      <ModalItem
+        icon={Link}
+        label="Accepted invite"
+        subLabel="LinkedIn"
+        nodeType="condition-linkedin-accepted"
+        color="text-blue-600"
+      />
+      <ModalItem
+        icon={Link}
+        label="Opened linkedin message"
+        subLabel="LinkedIn"
+        nodeType="condition-linkedin-opened"
+        color="text-blue-600"
+      />
+      <ModalItem
+        icon={GitBranch}
+        label="Has score"
+        subLabel="Score"
+        nodeType="condition-has-score"
+        color="text-red-600"
+      />
+    </div>
+
+    <h3 className="text-xs font-extrabold uppercase text-gray-500 pt-3 border-t border-gray-100">
+      Call, WhatsApp & SMS
+    </h3>
+    <div className="grid grid-cols-3 gap-3">
+      <ModalItem
+        icon={Phone}
+        label="Has phone number"
+        nodeType="condition-has-phone"
+        color="text-red-600"
+      />
+      <ModalItem
+        icon={Phone}
+        label="Call status"
+        nodeType="condition-call-status"
+        color="text-red-600"
+      />
+      <ModalItem
+        icon={Clock}
+        label="Has WhatsApp account"
+        subLabel="WhatsApp"
+        nodeType="condition-has-whatsapp"
+        color="text-green-500"
+        isLocked={true}
+      />
+    </div>
+  </div>
+);
+
+const StepConditionModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [activeTab, setActiveTab] = useState<"Steps" | "Conditions">("Steps");
+
   return (
-    <aside
-      className={`
-            fixed top-0 left-0 h-full w-64 bg-gray-100 shadow-2xl z-50 transform 
-            transition-transform duration-300 ease-in-out
-            ${isOpen ? "translate-x-0" : "-translate-x-full"}
-            flex flex-col
-        `}
-    >
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white">
-        <span className="text-lg font-bold text-gray-800">Add Step</span>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-full text-gray-500 hover:bg-gray-100"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div className="p-4 space-y-4 overflow-y-auto">
-        <h3 className="text-xs font-extrabold uppercase text-red-600 mb-3">
-          COMMUNICATION
-        </h3>
-        <div className="grid grid-cols-1 gap-3">
-          <SidebarItem
-            icon={Mail}
-            label="Email"
-            nodeType="email"
-            tailwindColor="text-green-600"
-          />
-          <SidebarItem
-            icon={Phone}
-            label="Call"
-            nodeType="call"
-            tailwindColor="text-red-600"
-          />
-          <SidebarItem
-            icon={Link}
-            label="LinkedIn"
-            nodeType="linkedin"
-            tailwindColor="text-blue-600"
-          />
-        </div>
-
-        <h3 className="text-xs font-extrabold uppercase text-red-600 mb-3 pt-4 border-t border-red-200">
-          LOGIC
-        </h3>
-        <div className="grid grid-cols-1 gap-3">
-          <SidebarItem
-            icon={Clock}
-            label="Wait Period"
-            nodeType="wait"
-            tailwindColor="text-gray-600"
-          />
-          <SidebarItem
-            icon={GitBranch}
-            label="Condition"
-            nodeType="condition"
-            tailwindColor="text-pink-600"
-          />
+    // FIX: Modal is now positioned relative to the top-left flow area, 
+    // just below the toolbar, using `top-16 left-4` instead of `top-20 left-1/2` centered.
+    <div className="absolute top-16 left-4 w-[800px] max-w-3xl bg-white p-6 rounded-xl shadow-2xl border border-gray-100 z-50">
+      <div className="flex justify-center mb-6">
+        <div className="p-1 rounded-lg border border-gray-200 flex space-x-1">
+          <button
+            onClick={() => setActiveTab("Steps")}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
+              activeTab === "Steps"
+                ? "bg-blue-600 text-white shadow-md"
+                : "text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Steps
+          </button>
+          <button
+            onClick={() => setActiveTab("Conditions")}
+            className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
+              activeTab === "Conditions"
+                ? "bg-blue-600 text-white shadow-md"
+                : "text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            Conditions
+          </button>
         </div>
       </div>
-    </aside>
+
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 p-1 rounded-full text-gray-500 hover:bg-gray-100"
+      >
+        <X className="h-5 w-5" />
+      </button>
+
+      {/* Ensures the content scrolls within the modal */}
+      <div className="overflow-y-auto max-h-[85vh]">
+        {activeTab === "Steps" && <StepsContent />}
+        {activeTab === "Conditions" && (
+          <>
+            <p className="text-sm text-center text-gray-600 mb-6">
+              Add conditions to your sequence and create decisions branches to
+              get the best results possible
+            </p>
+            <ConditionsContent />
+          </>
+        )}
+      </div>
+    </div>
   );
 };
+
 
 interface SequencePageProps {
   initialCadenceSteps: string;
@@ -679,7 +990,7 @@ const SequencePage: React.FC<SequencePageProps> = ({
   initialCadenceSteps,
   onBack,
 }) => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const flowElements = useMemo(() => {
     if (!initialCadenceSteps || initialCadenceSteps.length < 10) {
@@ -701,45 +1012,48 @@ const SequencePage: React.FC<SequencePageProps> = ({
 
   const ActionToolbar = useMemo(
     () => (
-      <div className="absolute top-4 left-4 z-40 bg-white p-2 rounded-xl shadow-lg border border-gray-100 flex items-center space-x-2">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg text-gray-700 hover:bg-gray-100 transition flex items-center text-sm font-medium"
-        >
-          <ChevronLeft className="h-4 w-4 mr-1" /> Back to Builder
-        </button>
+      // Toolbar remains static relative to the flow view
+      <div className="absolute top-4 left-4 z-40">
+        <div className="relative bg-white p-2 rounded-xl shadow-lg border border-gray-100 flex items-center space-x-2">
+          <button
+            onClick={onBack}
+            className="p-2 rounded-lg text-gray-700 hover:bg-gray-100 transition flex items-center text-sm font-medium"
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back to Builder
+          </button>
 
-        <div className="h-6 w-px bg-gray-200"></div>
+          <div className="h-6 w-px bg-gray-200"></div>
 
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className={`p-2 rounded-lg transition-all duration-200 flex items-center space-x-1 text-sm font-medium
+          <button
+            onClick={() => setIsModalOpen(!isModalOpen)}
+            className={`p-2 rounded-lg transition-all duration-200 flex items-center space-x-1 text-sm font-medium
                 ${
-                  isSidebarOpen
+                  isModalOpen
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "text-red-600 hover:bg-red-50"
                 }`}
-        >
-          {isSidebarOpen ? (
-            <>
-              <X className="h-4 w-4" /> <span>Close Tools</span>
-            </>
-          ) : (
-            <>
-              <PenTool className="h-4 w-4" /> <span>Edit Steps</span>
-            </>
-          )}
-        </button>
+          >
+            {isModalOpen ? (
+              <>
+                <X className="h-4 w-4" /> <span>Close Tools</span>
+              </>
+            ) : (
+              <>
+                <PenTool className="h-4 w-4" /> <span>Edit Steps</span>
+              </>
+            )}
+          </button>
+
+          {/* Modal is rendered outside this container for screen centering */}
+        </div>
       </div>
     ),
-    [isSidebarOpen, onBack]
+    [isModalOpen, onBack]
   );
 
   return (
-    <div className="flex h-screen w-screen relative overflow-hidden bg-gray-100">
+    <div className="flex h-full w-full relative bg-red-100">
       {ActionToolbar}
-
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <ReactFlowProvider>
         <Flow
@@ -747,6 +1061,10 @@ const SequencePage: React.FC<SequencePageProps> = ({
           initialFitView={!!initialCadenceSteps}
         />
       </ReactFlowProvider>
+
+      {isModalOpen && (
+        <StepConditionModal onClose={() => setIsModalOpen(false)} />
+      )}
     </div>
   );
 };

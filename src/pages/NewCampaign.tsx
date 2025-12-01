@@ -1206,26 +1206,28 @@ export default function CampaignBuilder() {
       : [];
 
     return (
-      <div className="flex flex-col items-center p-12 bg-gray-50 h-[85vh] relative justify-center">
+      <div className="flex flex-col items-center p-12 h-[85vh] relative justify-center">
         <MailboxPickerOverlay
           isOpen={isMailboxPickerOpen}
           onClose={() => setIsMailboxPickerOpen(false)}
           onSave={handleMailboxSave}
           initialSelection={initialEmailSelection}
         />
-
-        {/* --- HEADER --- */}
-
-        <div className="flex flex-col items-center mb-12 max-w-2xl">
-          <h2 className="text-4xl font-extrabold text-[#23272f] mb-3 text-center tracking-tight">
-            Launch Your AI Campaign Strategy
+        
+        <div
+          className="flex flex-col items-center mb-8 max-w-2xl 
+                animate-in fade-in slide-in-from-top-10 duration-1000"
+        >
+          <h2
+            className="text-5xl font-bold text-[#e63946] mb-1 text-center tracking-tight 
+                   shadow-text-sm leading-snug"
+          >
+            Hello, <span className="text-gray-800">Shreenath</span>
           </h2>
+          
         </div>
-
         {/* --- MAIN INTERACTION AREA --- */}
-
-        <div className="w-full max-w-4xl custom-scrollbar-grey relative group">
-          {/* --- 1. CONFIGURATION BOX (CHIPS) --- */}
+        <div className="w-full max-w-4xl custom-scrollbar-grey relative mb-20 group">
 
           {tokenizedMode && (
             <Card className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl shadow-xl mb-4 bg-white">
@@ -1307,7 +1309,7 @@ export default function CampaignBuilder() {
           {/* --- 2. ACTION BOX (INPUT) --- */}
 
           <div
-            className={`relative bg-white shadow-2xl rounded-2xl transition-all duration-300
+            className={`relative bg-white w-[100vh] h-[16vh] shadow-2xl rounded-2xl transition-all duration-300
 
               ${
                 tokenizedMode
