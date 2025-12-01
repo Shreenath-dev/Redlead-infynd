@@ -1403,7 +1403,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Quick Summary Banner */}
-        <QuickSummaryBanner insightCount={activeInsightCount} />
+        {/* <QuickSummaryBanner insightCount={activeInsightCount} /> */}
 
         {/* KPI Grid - 4 Cards with Stagger */}
         <section className="mb-12">
