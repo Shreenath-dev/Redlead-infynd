@@ -704,14 +704,14 @@ const PerformanceChartCard: React.FC<{
                       );
                       setShowDateDropdown(false);
                     }}
-                    style={{
-                      animationDelay: `${idx * 30}ms`,
-                    }}
                     className={`w-full text-left px-4 py-3 text-sm transition-all duration-200 opacity-0 animate-slideInDown ${
                       dateRange === opt.value
                         ? "bg-gradient-to-r from-red-50 to-red-100 text-red-700 font-bold"
                         : "text-gray-900 hover:bg-gray-50 hover:translate-x-1"
                     }`}
+                    style={{
+                      animationDelay: `${idx * 30}ms`,
+                    }}
                   >
                     {opt.label}
                   </button>
