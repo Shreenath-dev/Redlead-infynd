@@ -1,5 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 
+import { Navigate } from 'react-router-dom';
+
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import { useAuth } from "@/contexts/AuthContext";
-
 
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -208,7 +210,7 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 **CONTEXT & AMBIGUITY RULES:**
 
-- This is a sales outreach tool. If you see 'SME'/'sme', assume it means 'Subject Matter Expert' job role  understand the context and extract.
+- This is a sales outreach tool. If you see 'SME'/'sme', assume it means 'Subject Matter Expert' job role  understand the context and extract.
 
 - If you see any term that could be a sales metric (e.g., 'leaves', 'lets', 'leeds'), assume the user means **leads** (sales prospects).
 
@@ -224,7 +226,7 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 1. **ICP:** Required parameters (target job role, location, industry, goal). If anything is missing, ask for it. Calculate required leads internally (Goal / 0.01).
 
-  // MANDATORY: If the user provides data for a field in the prompt (e.g., role, industry, goal, location), you MUST return the 'icp' object in the JSON with the extracted data dont repeat the questions that are proviously asked.
+  // MANDATORY: If the user provides data for a field in the prompt (e.g., role, industry, goal, location), you MUST return the 'icp' object in the JSON with the extracted data dont repeat the questions that are proviously asked.
 
 
 
@@ -234,11 +236,11 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 3. **Data Source:** **DO NOT ASK FOR SOURCE. Assume CSV upload and proceed to step 4 if URL is present.** - Calculate Required leads (Goal / 0.01).
 
-  - Assume Uploaded = 150000.
+  - Assume Uploaded = 150000.
 
-  - COMPARE: If Uploaded < Required, WARN the user.
+  - COMPARE: If Uploaded < Required, WARN the user.
 
-  - If Uploaded >= Required, suggest Touchpoints.
+  - If Uploaded >= Required, suggest Touchpoints.
 
 
 
@@ -248,11 +250,11 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 5. **Mailbox:** Ask user to select sender accounts(if user has multiple domain mailid make them as cluster by grouping similar domain and ask which cluster to select and show only that specified mailbox).
 
-    // CRITICAL FIX: The quick action should be a specific instruction like "Select all infynd.com emails" based on the clustered list provided in the context.
+    // CRITICAL FIX: The quick action should be a specific instruction like "Select all infynd.com emails" based on the clustered list provided in the context.
 
 
 
-6. **Launch:** Only when Mailbox is selected, ask for confirmation.
+6. **Launch:** Only when Mailbox is selected, ask for confirmation to launch if user confirm the launcg campaign (no quick action /suggestion).
 
 
 
@@ -262,19 +264,20 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 - **CRITICAL: You MUST return 3 'suggested_actions'. These actions MUST be direct, single-click examples of the missing values, not questions.**
 
-  - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 100 leads/month").
+  - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 100 leads/month").
 
-  - **SINGLE MODE:** If only one key ICP parameter is missing, provide 3 simple examples relevant only to that key (e.g., "USA", "UK", "100 leads/month").
+  - **SINGLE MODE:** If only one key ICP parameter is missing, provide 3 simple examples relevant only to that key (e.g., "USA", "UK", "100 leads/month").
 
-  - Prioritize missing ICP fields. Only suggest "Provide company URL" if the ICP is 100% complete.
+  - Prioritize missing ICP fields. Only suggest "Provide company URL" if the ICP is 100% complete.
 
-  -Don't skip touchpoints and cadence step and mailbox step.
+  -Don't skip touchpoints and cadence step and mailbox step.
 
-  -The quick action should be relavant to the current step.
+  -The quick action should be relavant to the current step.
 
-  -Strictly follow mailbox logic.
+  -Strictly follow mailbox logic.
 
-  -Dont haulcinate and repeat the questions
+  -Dont haulcinate and repeat the questions
+   - in the last step quick action is asked repeatedly stop showing once user launch the campign
 
 **OUTPUT:** JSON Schema only.
 
@@ -404,11 +407,11 @@ const MailboxPickerOverlay = ({
               key={mail.id}
               className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors
 
-                ${
-                  selectedEmails.includes(mail.email)
-                    ? "bg-red-50 border-red-200"
-                    : "bg-white border-gray-100 hover:bg-gray-50"
-                }`}
+                ${
+                selectedEmails.includes(mail.email)
+                  ? "bg-red-50 border-red-200"
+                  : "bg-white border-gray-100 hover:bg-gray-50"
+              }`}
               onClick={() => toggleEmail(mail.email)}
             >
               <div className="flex items-center gap-3">
@@ -480,6 +483,7 @@ export default function CampaignBuilder() {
 
     mailbox: { selected: [] },
 
+    // ⭐ FIX 1A: Initial launch status is Draft
     launch: { status: "Draft" },
   });
 
@@ -731,12 +735,9 @@ export default function CampaignBuilder() {
 
     if (view === "initial") setView("dual");
 
-    // CRITICAL FIX: Construct the full history for the model
 
-    // Map the current chat state to the format required by the Gemini SDK
 
     const historyForGemini = chatRef.current.map((msg) => ({
-      // Gemini roles: 'user' for user, 'model' for AI response
 
       role: msg.role === "ai" ? "model" : "user",
 
@@ -745,67 +746,61 @@ export default function CampaignBuilder() {
 
     let systemPrompt = GEMINI_PROMPT_TEMPLATE;
 
-    // ⭐ NEW FIX: Mailbox Clustering Context for Step 5
-
     const clusteredMailboxes = clusterEmailsByDomain(AVAILABLE_EMAILS);
 
     const MailboxContext = `
 
-        **CURRENT MAILBOX STATUS (CRITICAL):**
+        **CURRENT MAILBOX STATUS (CRITICAL):**
 
-        You have access to the following clustered sender mailboxes. Use the domain names for suggestions in Step 5:
+        You have access to the following clustered sender mailboxes. Use the domain names for suggestions in Step 5:
 
-        ${clusteredMailboxes}
+        ${clusteredMailboxes}
 
-        
+        
 
-        **MAILBOX LOGIC:** When the workflow reaches step 5, you MUST suggest quick actions like: 'Select all infynd.com emails', 'Select the n2b.com emails', etc., based on these clusters.
+        **MAILBOX LOGIC:** When the workflow reaches step 5, you MUST suggest quick actions like: 'Select all infynd.com emails', 'Select the n2b.com emails', etc., based on these clusters.
 
-    `;
+    `;
 
     systemPrompt = MailboxContext + "\n" + systemPrompt;
 
     if (isVoiceInput) {
-      // STT correction logic remains, but applies to the updated system prompt
 
       const CorrectionContext = `
 
-            **STT CORRECTION RULES (CRITICAL):**
+            **STT CORRECTION RULES (CRITICAL):**
 
-            1. The following input is from a microphone, which may contain errors. Fix any misspellings, proper nouns, and campaign-specific terms.
+            1. The following input is from a microphone, which may contain errors. Fix any misspellings, proper nouns, and campaign-specific terms.
 
-            2. If you see 'leaves', 'leafs', 'leeds', or 'lets', assume the sales term 'leads'.
+            2. If you see 'leaves', 'leafs', 'leeds', or 'lets', assume the sales term 'leads'.
 
-            3. If you see 'in front dot com' or similar phrases, assume the user meant 'infynd.com' (based on available mailboxes).
+            3. If you see 'in front dot com' or similar phrases, assume the user meant 'infynd.com' (based on available mailboxes).
 
-            4. Normalize industries (e.g., 'health care' -> 'Healthcare', 'financial' -> 'Financial Services').
+            4. Normalize industries (e.g., 'health care' -> 'Healthcare', 'financial' -> 'Financial Services').
 
-            5. ONLY use the corrected, clean input when evaluating the core campaign architecture goal below.
+            5. ONLY use the corrected, clean input when evaluating the core campaign architecture goal below.
 
-            
+            
 
-            **ORIGINAL USER INPUT (to be corrected):** "${userText}"
+            **ORIGINAL USER INPUT (to be corrected):** "${userText}"
 
-            
+            
 
-            **INSTRUCTIONS:** First, internally correct the user's input. Then, proceed with the campaign workflow below using the corrected input.
+            **INSTRUCTIONS:** First, internally correct the user's input. Then, proceed with the campaign workflow below using the corrected input.
 
-        `;
+        `;
 
-      systemPrompt = CorrectionContext + `\n` + systemPrompt; // Append the rest of the system prompt
+      systemPrompt = CorrectionContext + `\n` + systemPrompt; 
     }
 
     const chatSession = ai.chats.create({
       model: "gemini-2.5-flash",
 
-      // History now contains ALL previous turns + the system prompt before the first message.
 
       history: [
-        // The system prompt is prepended to the history as a 'user' instruction to set the model's behavior.
 
         { role: "user", parts: [{ text: systemPrompt }] },
 
-        // All conversation messages follow
 
         ...historyForGemini,
       ],
@@ -813,7 +808,6 @@ export default function CampaignBuilder() {
 
     try {
       const result = await chatSession.sendMessage({
-        // The last user message is sent via the message parameter for this turn
 
         message: userText,
 
@@ -864,8 +858,9 @@ export default function CampaignBuilder() {
     let finalResponse = ai_response;
 
     let nextActions = suggested_actions || [];
+    
+    const isUserConfirmingMailbox = userText.toLowerCase().includes("i confirm using these emails");
 
-    // 1. ICP Update (Smart Merge Logic - FIXES STATE LOSS)
 
     if (icp) {
       const currentIcp = nextEditor.icp;
@@ -891,7 +886,6 @@ export default function CampaignBuilder() {
       }
     }
 
-    // 2. Company/URL Update
 
     if (company) {
       const valProp =
@@ -915,7 +909,6 @@ export default function CampaignBuilder() {
       };
     }
 
-    // 3. Data Source HARDCODE (Only if ICP and Company URL are set)
 
     if (
       nextEditor.icp.goal &&
@@ -927,7 +920,7 @@ export default function CampaignBuilder() {
       const req = nextEditor.calculations.required;
 
       nextEditor.dataSource = {
-        source_type: "CSV Upload", // Hardcoded source type
+        source_type: "CSV Upload", 
 
         status: "Processed",
 
@@ -942,7 +935,6 @@ export default function CampaignBuilder() {
       ) {
         finalResponse = `I've processed your CSV. ⚠️ **Gap Detected:** You need **${req.toLocaleString()}** leads, but this source has **${simulatedUpload.toLocaleString()}**. Enrich data or proceed?`;
       } else {
-        // If data is sufficient, force prompt to move to next step (Cadence)
 
         finalResponse =
           finalResponse ||
@@ -950,57 +942,50 @@ export default function CampaignBuilder() {
       }
     }
 
-    // 4. Cadence Update
 
     if (cadence) nextEditor.cadence = { ...nextEditor.cadence, ...cadence };
 
-    // 5. Mailbox Update
-
     if (mailbox_selection && mailbox_selection.length > 0) {
-      // ⭐ CRITICAL FIX: Match the AI's selection strings (emails or domains) against the full AVAILABLE_EMAILS.
 
       const matchedIds = AVAILABLE_EMAILS.filter((e) =>
         mailbox_selection.some(
           (s) =>
-            e.email.toLowerCase().includes(s.toLowerCase()) || // full email or partial match
+            e.email.toLowerCase().includes(s.toLowerCase()) || 
             s.toLowerCase().includes(e.email.toLowerCase()) ||
             e.email.split("@")[1].toLowerCase() ===
-              s.toLowerCase().replace("select all ", "").replace(" emails", "") // Match domain (e.g., 'infynd.com')
+              s.toLowerCase().replace("select all ", "").replace(" emails", "") 
         )
       ).map((e) => e.id);
 
-      // Use the matched IDs as the new selection, replacing the current ones if the AI provided a selection.
 
       nextEditor.mailbox.selected = matchedIds;
+      
+      if (nextEditor.mailbox.selected.length > 0) {
+          nextEditor.launch.status = "MailboxSelected";
+      }
+    }
+    
+    if (launch_ready || isUserConfirmingMailbox) {
+      nextEditor.launch.status = "Ready"; 
+      finalResponse =
+        response.ai_response || "Campaign configured successfully! Confirm launch in the Visual Editor.";
     }
 
-    // 6. Launch Update
 
-    if (launch_ready) {
-      nextEditor.launch.status = "Ready";
-
-      finalResponse = "Campaign configured successfully!";
-    }
-
-    // *** FINAL ACTION LOGIC ***
-
-    if (nextActions.length === 0 && !launch_ready) {
-      // Default action if the AI returns no suggestions but still needs info
-
-      nextActions = ["Continue Setup", "Review Settings"];
-    }
-
-    // ⭐ EDGE CASE: If the AI returns a 'select' action, ensure it's visually distinct and relevant.
-
-    if (mailbox_selection?.length > 0) {
+    if (nextEditor.launch.status === "Launched") {
+      nextActions = []; 
+    } else if (nextEditor.launch.status === "Ready") {
+       nextActions = [];
+    } else if (nextEditor.launch.status === "MailboxSelected") {
       nextActions = ["Confirm Selection"];
+    } else if (nextActions.length === 0 && !launch_ready) {
+      nextActions = ["Continue Setup", "Review Settings"];
     }
 
     setEditor(nextEditor);
 
     setChat((prev) => [...prev, { role: "ai", text: finalResponse }]);
 
-    // ⭐ CONDITIONAL TTS: Only speak if the input was from the mic
 
     if (isVoiceInput) {
       speakAiResponse(finalResponse);
@@ -1154,12 +1139,12 @@ export default function CampaignBuilder() {
   };
 
   const confirmMailboxSelection = () => {
-    // ⭐ Reworked to use the single sendMessage path
 
     sendMessage("Confirm Selection");
   };
 
-  const showICP = !!editor.icp.goal || !!editor.icp.role; // Check for any ICP detail
+  const showICP = !!editor.icp.goal || !!editor.icp.role;
+
 
   const showCompany = showICP && !!editor.company.url;
 
@@ -1171,7 +1156,6 @@ export default function CampaignBuilder() {
 
   const showLaunch = showMailbox && editor.mailbox.selected.length > 0;
   const { user, signOut } = useAuth();
-  
 
   if (appView === "editor" && editor.cadence.steps) {
     return (
@@ -1179,6 +1163,80 @@ export default function CampaignBuilder() {
         initialCadenceSteps={editor.cadence.steps}
         onBack={() => setAppView("builder")}
       />
+    );
+  }
+
+  if (appView === "launched") {
+    // Determine the user's role and industry for the summary
+    const role = editor.icp.role || 'Target Role';
+    const industry = editor.icp.industry || 'Industry';
+    const goal = editor.icp.goal || 'Goal Not Set';
+    const requiredLeads = editor.calculations.required?.toLocaleString() || 'N/A';
+    
+    return (
+      <div className="flex flex-col items-center justify-center h-full w-full bg-white animate-in fade-in p-10">
+        <div className="text-center max-w-2xl w-full">
+          
+          <div className="relative mb-8 h-32">
+             
+             <Send 
+                 className="h-28 w-28 text-[#e63946] mx-auto 
+                            absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 
+                            // Custom animation for 'take-off' and motion blur
+                            animate-pulse-takeoff rotate-45"
+                 style={{ 
+                     
+                     animation: 'takeoff 2s ease-out forwards',
+                     boxShadow: '0 0 20px rgba(230, 57, 70, 0.5)'
+                 }}
+             />
+             <Sparkles className="h-10 w-10 text-yellow-400 absolute bottom-0 left-[45%] opacity-70 animate-ping-slow" />
+          </div>
+          
+          <h1 className="text-5xl font-extrabold text-[#23272f] mb-4 tracking-tighter">
+            Outreach Mission Initiated!
+          </h1>
+          
+          <p className="text-xl text-gray-600 mb-10">
+            {editor.company.url || "Your Campaign"} has embarked on its journey to reach {requiredLeads} prospects.
+          </p>
+
+          <div className="bg-gray-50 p-6 rounded-xl border border-gray-200 shadow-lg mb-12">
+            <h2 className="text-lg font-bold text-gray-700 mb-4">Launch Command Center</h2>
+            <div className="grid grid-cols-3 gap-6">
+              
+              <div className="p-3 bg-white rounded-lg border">
+                <span className="text-xs font-medium text-gray-500 block mb-1">Target Destination</span>
+                <p className="text-lg font-semibold text-gray-800">{role}</p>
+              </div>
+              
+              <div className="p-3 bg-white rounded-lg border border-red-200">
+                <span className="text-xs font-medium text-red-500 block mb-1">Mission Goal</span>
+                <p className="text-2xl font-extrabold text-[#e63946]">{goal}</p>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border">
+                <span className="text-xs font-medium text-gray-500 block mb-1">Vessel Capacity</span>
+                <p className="text-lg font-semibold text-gray-800">{requiredLeads} Prospects</p>
+              </div>
+            </div>
+          </div>
+          
+          <Button
+            className="bg-[#e63946] text-white px-10 py-3 rounded-full text-lg font-bold hover:bg-red-700 transition-all shadow-xl hover:shadow-2xl"
+            onClick={
+               () => window.location.href = '/campaigns'
+            }
+          >
+            Monitor Mission Progress
+          </Button>
+
+           <p className="text-sm text-gray-400 mt-4">
+             The campaign is flying high. Track its performance in the dashboard.
+           </p>
+
+        </div>
+      </div>
     );
   }
 
@@ -1196,7 +1254,7 @@ export default function CampaignBuilder() {
       ? focusedToken?.key === "email"
         ? "Click the chip above to select mailboxes..."
         : `Enter ${focusedToken?.label || "details"} ${exampleText}...`
-      : `You can start by describing  your goals \n e.g. "I need to target CFOs in Financial Services in the UK to generate 100 leads this quarter.\n My website is www......`;
+      : `You can start by describing  your goals \n e.g. "I need to target CFOs in Financial Services in the UK to generate 100 leads this quarter.\n My website is www......`;
 
     const initialEmailToken = promptTokens.find((t) => t.key === "email");
 
@@ -1213,28 +1271,29 @@ export default function CampaignBuilder() {
           initialSelection={initialEmailSelection}
         />
 
-        <div
-          className="flex flex-col items-center mb-2 max-w-2xl"
-        >
+        <div className="flex flex-col items-center mb-2 max-w-2xl">
           <h2
             className="text-5xl font-bold text-[#e63946] mb-1 text-center tracking-tight 
-                   shadow-text-sm leading-snug"
+                   shadow-text-sm leading-snug"
           >
-            Hello, <span className="text-gray-800">{user?.identities[0].identity_data.name}</span>
+            Hello,{" "}
+            <span className="text-gray-800">
+              {user?.identities[0].identity_data.name}
+            </span>
           </h2>
         </div>
         <div
           className="flex flex-col items-center mb-12 max-w-2xl 
-                "
+                "
         >
           <h3
             className="text-2xl h-auto font-bold italic text-[#000000] text-center tracking-tight 
-                   shadow-text-sm leading-snug"
+                   shadow-text-sm leading-snug"
           >
-            What can I do for you today <span className="text-[#F81010]">?</span>
+            What can I do for you today{" "}
+            <span className="text-[#F81010]">?</span>
           </h3>
         </div>
-        {/* --- MAIN INTERACTION AREA --- */}
         <div className="w-full max-w-4xl custom-scrollbar-grey relative mb-20 group">
           {tokenizedMode && (
             <Card className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl shadow-xl mb-4 bg-white">
@@ -1250,34 +1309,31 @@ export default function CampaignBuilder() {
                     onClick={() => handleChipClick(token.key, token.value)}
                     className={`
 
-                    flex items-center gap-2 px-4 py-2 text-sm rounded-full transition-all duration-200 cursor-pointer 
+                    flex items-center gap-2 px-4 py-2 text-sm rounded-full transition-all duration-200 cursor-pointer 
 
-                    shadow-md 
+                    shadow-md 
 
-                    ${
+                    ${
                       token.value
                         ? "bg-blue-600 text-white font-medium hover:bg-blue-700"
                         : "bg-gray-100 text-gray-700 border border-gray-300 hover:border-blue-400"
                     }
 
-                    ${
+                    ${
                       editingTokenKey === token.key
                         ? "ring-4 ring-offset-2 ring-blue-300 shadow-2xl scale-[1.05] z-10"
                         : "z-0"
                     }
 
-                    `}
+                    `}
                   >
-                    {/* Placeholder Chip Label */}
 
                     <span className="font-medium opacity-80">
                       {token.label}:
                     </span>
 
-                    {/* Value Display */}
 
                     <span className="font-semibold truncate max-w-[200px]">
-                      {/* Show first email + count if multiple are selected */}
 
                       {token.key === "email" && token.value
                         ? token.value.split(", ").length > 1
@@ -1292,7 +1348,6 @@ export default function CampaignBuilder() {
                           )}
                     </span>
 
-                    {/* Dropdown/Check Icon */}
 
                     {token.key === "email" ? (
                       <ChevronDown
@@ -1311,24 +1366,21 @@ export default function CampaignBuilder() {
             </Card>
           )}
 
-          {/* --- END CONFIGURATION BOX --- */}
-
-          {/* --- 2. ACTION BOX (INPUT) --- */}
-
+          
           <div
             className={`relative bg-white w-full max-w-4xl shadow-2xl rounded-2xl h-auto  transition-all duration-300
 
-              ${
-                tokenizedMode
-                  ? "border-2 border-blue-400"
-                  : "border-2 border-gray-200 hover:border-gray-400"
-              }`}
+              ${
+              tokenizedMode
+                ? "border-2 border-blue-400"
+                : "border-2 border-gray-200 hover:border-gray-400"
+            }`}
           >
             <textarea
               ref={inputRef}
               className="w-full 
     h-auto 
-    p-6 pb-20 mb-3 text-md text-gray-800 border-none focus:ring-0 resize-none italic  placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl  
+    p-6 pb-20 mb-3 text-md text-gray-800 border-none focus:ring-0 resize-none italic  placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl  
     overflow-hidden"
               placeholder={currentPlaceholder}
               value={input}
@@ -1394,7 +1446,6 @@ export default function CampaignBuilder() {
                 </Button>
               </div>
 
-              {/* Send Button */}
 
               <Button
                 type="button"
@@ -1430,9 +1481,7 @@ export default function CampaignBuilder() {
             </div>
           </div>
 
-          {/* --- END ACTION BOX --- */}
-
-          {/* Helper text */}
+          
 
           {tokenizedMode && !areAllTokensFilled && focusedToken && (
             <p className="text-sm text-blue-600 mt-3 ml-2 animate-pulse font-medium flex items-center gap-2">
@@ -1462,11 +1511,26 @@ export default function CampaignBuilder() {
     );
   }
 
-  // --- RENDER: DUAL VIEW ---
+
+  
+  const status = editor.launch.status;
+  
+  const isVisualEditorPrioritized = status === "MailboxSelected" || status === "Ready";
+
+ 
+  const chatFlexClass = isVisualEditorPrioritized ? "flex-[3]" : "flex-[6]";
+  const builderFlexClass = isVisualEditorPrioritized ? "flex-[7]" : "flex-[4]";
+  const chatMaxWidth = isVisualEditorPrioritized ? "30%" : "60%";
+  const builderMaxWidth = isVisualEditorPrioritized ? "70%" : "40%";
+
 
   return (
     <div className="flex h-[95vh] w-full bg-white overflow-hidden custom-scrollbar-red-600">
-      <div className="flex-[6] relative flex flex-col items-center bg-white border-r border-[#eaeaea] min-w-[500px] max-w-[60%]">
+      
+      <div 
+        className={`${chatFlexClass} relative flex flex-col items-center bg-white border-r border-[#eaeaea] min-w-[500px]`}
+        style={{ maxWidth: chatMaxWidth }}
+      >
         <div className="w-full flex items-center gap-2 p-4 border-b border-[#f3f4f9]">
           <div className="h-8 w-8 rounded-full bg-[#e63946] flex items-center justify-center">
             <span className="text-white font-bold text-sm">AI</span>
@@ -1476,7 +1540,6 @@ export default function CampaignBuilder() {
             AI Campaign Assistant
           </span>
 
-          {/* TTS Status/Stop Button */}
 
           {isSpeaking ? (
             <Button
@@ -1512,7 +1575,6 @@ export default function CampaignBuilder() {
             </div>
           ))}
 
-          {/* VITAL FIX: Hide "Thinking..." while loading */}
 
           {isLoading && (
             <div className="mb-4 flex justify-start">
@@ -1522,34 +1584,33 @@ export default function CampaignBuilder() {
             </div>
           )}
 
-          {/* VITAL FIX: Only show quick actions if the array has content AND the page is not loading */}
+          
+          {dynamicQuickActions.length > 0 &&
+            !isLoading &&
+            editor.launch.status !== "Launched" && (
+              <div className="flex gap-2 my-2 flex-wrap">
+                {dynamicQuickActions.map((action, index) => (
+                  <button
+                    key={index}
 
-          {dynamicQuickActions.length > 0 && !isLoading && (
-            <div className="flex gap-2 my-2 flex-wrap">
-              {dynamicQuickActions.map((action, index) => (
-                <button
-                  key={index}
-                  // ⭐ EDGE CASE: Style the confirm button differently
+                    className={`px-4 py-1 rounded-full text-xs font-semibold shadow-sm hover:opacity-80 transition 
 
-                  className={`px-4 py-1 rounded-full text-xs font-semibold shadow-sm hover:opacity-80 transition 
-
-                    ${
+                    ${
                       action === "Confirm Selection"
                         ? "bg-green-600 text-white"
                         : "bg-[#e63946] text-white"
                     }`}
-                  onClick={() => sendMessage(action)}
-                >
-                  {action}
-                </button>
-              ))}
-            </div>
-          )}
+                    onClick={() => sendMessage(action)}
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            )}
 
           <div ref={chatEndRef} />
         </div>
 
-        {/* FIXED DUAL VIEW INPUT */}
 
         <div className="w-full px-6 py-4 border-t border-[#f3f4f9] bg-white">
           <div className="relative">
@@ -1578,7 +1639,6 @@ export default function CampaignBuilder() {
                 <Paperclip className="h-4 w-4" />
               </Button>
 
-              {/* STT Button (Mic) */}
 
               <Button
                 type="button"
@@ -1612,7 +1672,10 @@ export default function CampaignBuilder() {
         </div>
       </div>
 
-      <div className="flex-[4] px-8 py-4 overflow-y-auto">
+      <div 
+        className={`${builderFlexClass} px-8 py-4 overflow-y-auto`}
+        style={{ maxWidth: builderMaxWidth }}
+      >
         <div className="flex items-center justify-between mb-4 border-b pb-2">
           <span className="font-bold text-lg text-[#23272f]">
             Visual Editor
@@ -1621,8 +1684,9 @@ export default function CampaignBuilder() {
           <Button
             className="bg-[#e63946] text-white px-6 rounded-lg font-semibold hover:bg-red-700 disabled:bg-gray-400"
             disabled={
-              !editor.launch?.status || editor.launch?.status !== "Ready"
+              editor.launch?.status !== "Ready"
             }
+            onClick={() => setAppView("launched")} 
           >
             Launch Campaign
           </Button>
@@ -1863,7 +1927,7 @@ export default function CampaignBuilder() {
           )}
 
           {showMailbox && (
-            <Card className="rounded-lg  bg-white animate-in fade-in slide-in-from-bottom-2 border-l-4  ">
+            <Card className="rounded-lg  bg-white animate-in fade-in slide-in-from-bottom-2 border-l-4  ">
               <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-2">
                   <Mail className="h-5 w-5 text-[#e63946]" />
@@ -1882,7 +1946,12 @@ export default function CampaignBuilder() {
                     size="sm"
                     className="h-7 bg-green-600 hover:bg-green-700 text-white"
                     onClick={confirmMailboxSelection}
-                    disabled={editor.mailbox.selected.length === 0}
+                    disabled={
+                      editor.mailbox.selected.length === 0 ||
+                      editor.launch.status === "Launched" ||
+                       // Disable the inline confirmation button if the AI has already confirmed the selection
+                      editor.launch.status === "Ready"
+                    }
                   >
                     <Check className="h-4 w-4" />
                   </Button>
@@ -1896,11 +1965,11 @@ export default function CampaignBuilder() {
                       key={mail.id}
                       className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors
 
-                        ${
-                          editor.mailbox.selected.includes(mail.id)
-                            ? "bg-red-50 border-red-200"
-                            : "bg-white border-gray-100"
-                        }`}
+                        ${
+                        editor.mailbox.selected.includes(mail.id)
+                          ? "bg-red-50 border-red-200"
+                          : "bg-white border-gray-100"
+                      }`}
                       onClick={() => toggleMailbox(mail.id)}
                     >
                       <div className="flex items-center gap-3">

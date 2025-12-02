@@ -151,7 +151,27 @@ All colors MUST be HSL.
 /* .scroll-on-hover {
   -ms-overflow-style: none;
 } */
+@keyframes takeoff {
+  0% {
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.5);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translate(0, -50%) rotate(30deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(200px, -200px) rotate(45deg) scale(0.8);
+    opacity: 0; /* Fades out as it 'leaves' the screen */
+  }
+}
 
+.animate-pulse-takeoff {
+  animation: takeoff 2s ease-out forwards;
+}
+.animate-ping-slow {
+  animation: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
 @layer base {
   * {
     @apply border-border;
