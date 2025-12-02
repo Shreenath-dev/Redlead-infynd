@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 
 import { Input } from "@/components/ui/input";
 
+import { useAuth } from "@/contexts/AuthContext";
+
+
 import { Checkbox } from "@/components/ui/checkbox";
 
 import { GoogleGenAI } from "@google/genai";
@@ -458,9 +461,7 @@ export default function CampaignBuilder() {
 
   const [view, setView] = useState("initial");
 
-  const [chat, setChat] = useState([
-    
-  ]);
+  const [chat, setChat] = useState([]);
 
   const [input, setInput] = useState("");
 
@@ -1169,6 +1170,8 @@ export default function CampaignBuilder() {
   const showMailbox = showCadence;
 
   const showLaunch = showMailbox && editor.mailbox.selected.length > 0;
+  const { user, signOut } = useAuth();
+  
 
   if (appView === "editor" && editor.cadence.steps) {
     return (
@@ -1193,7 +1196,7 @@ export default function CampaignBuilder() {
       ? focusedToken?.key === "email"
         ? "Click the chip above to select mailboxes..."
         : `Enter ${focusedToken?.label || "details"} ${exampleText}...`
-      : "Target CTOs in US SaaS companies to generate 150 leads/month. My site is example.com.";
+      : `You can start by describing  your goals \n e.g. "I need to target CFOs in Financial Services in the UK to generate 100 leads this quarter.\n My website is www......`;
 
     const initialEmailToken = promptTokens.find((t) => t.key === "email");
 
@@ -1211,15 +1214,25 @@ export default function CampaignBuilder() {
         />
 
         <div
-          className="flex flex-col items-center mb-8 max-w-2xl 
-                animate-in fade-in slide-in-from-top-10 duration-1000"
+          className="flex flex-col items-center mb-2 max-w-2xl"
         >
           <h2
             className="text-5xl font-bold text-[#e63946] mb-1 text-center tracking-tight 
                    shadow-text-sm leading-snug"
           >
-            Hello, <span className="text-gray-800">Shreenath</span>
+            Hello, <span className="text-gray-800">{user?.identities[0].identity_data.name}</span>
           </h2>
+        </div>
+        <div
+          className="flex flex-col items-center mb-12 max-w-2xl 
+                "
+        >
+          <h3
+            className="text-2xl h-auto font-bold italic text-[#000000] text-center tracking-tight 
+                   shadow-text-sm leading-snug"
+          >
+            What can I do for you today <span className="text-[#F81010]">?</span>
+          </h3>
         </div>
         {/* --- MAIN INTERACTION AREA --- */}
         <div className="w-full max-w-4xl custom-scrollbar-grey relative mb-20 group">
@@ -1303,7 +1316,7 @@ export default function CampaignBuilder() {
           {/* --- 2. ACTION BOX (INPUT) --- */}
 
           <div
-            className={`relative bg-white w-full max-w-4xl shadow-2xl rounded-2xl h-auto  transition-all duration-300
+            className={`relative bg-white w-full max-w-4xl shadow-2xl rounded-2xl h-auto  transition-all duration-300
 
               ${
                 tokenizedMode
@@ -1314,9 +1327,9 @@ export default function CampaignBuilder() {
             <textarea
               ref={inputRef}
               className="w-full 
-    h-auto 
-    p-6 pb-20 text-lg text-gray-800 border-none focus:ring-0 resize-none placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl 
-    overflow-y-auto"
+    h-auto 
+    p-6 pb-20 mb-2 text-md text-gray-800 border-none focus:ring-0 resize-none italic  placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl 
+    overflow-hidden"
               placeholder={currentPlaceholder}
               value={input}
               onChange={(e) => {
@@ -1344,8 +1357,6 @@ export default function CampaignBuilder() {
               }}
               disabled={tokenizedMode && editingTokenKey === "email"}
             />
-
-            {/* Bottom Actions Bar (Pinned Inside) - Re-styled for clarity */}
 
             <div className="absolute bottom-4 left-6 right-6 flex items-center justify-between sm:h-15 bg-white/80 backdrop-blur-sm pt-2 border-t border-gray-100">
               <div className="flex items-center gap-2">
