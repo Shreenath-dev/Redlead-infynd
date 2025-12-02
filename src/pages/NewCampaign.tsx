@@ -264,9 +264,9 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 - **CRITICAL: You MUST return 3 'suggested_actions'. These actions MUST be direct, single-click examples of the missing values, not questions.**
 
-  - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 100 leads/month").
+  - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 10 leads/month").
 
-  - **SINGLE MODE:** If only one key ICP parameter is missing, provide 3 simple examples relevant only to that key (e.g., "USA", "UK", "100 leads/month").
+  - **SINGLE MODE:** If only one key ICP parameter is missing, provide 3 simple examples relevant only to that key (e.g., "USA", "UK", "10/20/30 leads/month").
 
   - Prioritize missing ICP fields. Only suggest "Provide company URL" if the ICP is 100% complete.
 
@@ -277,6 +277,7 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
   -Strictly follow mailbox logic.
 
   -Dont haulcinate and repeat the questions
+
    - in the last step quick action is asked repeatedly stop showing once user launch the campign
 
 **OUTPUT:** JSON Schema only.
