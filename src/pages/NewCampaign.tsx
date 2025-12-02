@@ -1194,7 +1194,7 @@ export default function CampaignBuilder() {
           </div>
           
           <h1 className="text-5xl font-extrabold text-[#23272f] mb-4 tracking-tighter">
-            Outreach Mission Initiated!
+            Outreach Campaign Initiated!
           </h1>
           
           <p className="text-xl text-gray-600 mb-10">
@@ -1211,7 +1211,7 @@ export default function CampaignBuilder() {
               </div>
               
               <div className="p-3 bg-white rounded-lg border border-red-200">
-                <span className="text-xs font-medium text-red-500 block mb-1">Mission Goal</span>
+                <span className="text-xs font-medium text-red-500 block mb-1">Goal</span>
                 <p className="text-2xl font-extrabold text-[#e63946]">{goal}</p>
               </div>
 
@@ -1228,7 +1228,7 @@ export default function CampaignBuilder() {
                () => window.location.href = '/campaigns'
             }
           >
-            Monitor Mission Progress
+            Go to Campaign Dashboard
           </Button>
 
            <p className="text-sm text-gray-400 mt-4">
