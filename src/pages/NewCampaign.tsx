@@ -202,7 +202,6 @@ const PROMPT_TOKENS = [
 
 const MAGIC_PROMPT_TEMPLATE_V2 = `I want to launch a campaign targeting {targetRole} in {industry} for {location}. My goal is to generate {goal}. My website is {url}. Leads are currently stored in {dataSource}. Please create a 5-step sequence using Email, Phone & LinkedIn, sending from {email}.`;
 
-// --- GEMINI CAMPAIGN PROMPT TEMPLATE (Pulled out for correction logic) ---
 
 const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal is to parse the user's input and generate the JSON response using the following workflow and rules:
 
@@ -224,7 +223,7 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 
 
 
-1. **ICP:** Required parameters (target job role, location, industry, goal). If anything is missing, ask for it. Calculate required leads internally (Goal / 0.01).
+1. **ICP:** Required parameters (target job role, location, industry, goal(less than 50 leads)). If anything is missing, ask for it. Calculate required leads internally (Goal / 0.01).
 
   // MANDATORY: If the user provides data for a field in the prompt (e.g., role, industry, goal, location), you MUST return the 'icp' object in the JSON with the extracted data dont repeat the questions that are proviously asked.
 
@@ -263,6 +262,8 @@ const GEMINI_PROMPT_TEMPLATE = `You are an expert Campaign Architect. Your goal 
 - Content must be **1-2 lines max**.
 
 - **CRITICAL: You MUST return 3 'suggested_actions'. These actions MUST be direct, single-click examples of the missing values, not questions.**
+
+-lead (goal) size should be less than 50 (quick qction)
 
   - **CONCATENATION MODE:** If two or more key ICP parameters (Location, Goal) are missing, combine them into single, complete action strings (e.g., "USA and 10 leads/month").
 
