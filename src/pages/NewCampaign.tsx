@@ -1328,7 +1328,7 @@ export default function CampaignBuilder() {
               ref={inputRef}
               className="w-full 
     h-auto 
-    p-6 pb-20 mb-2 text-md text-gray-800 border-none focus:ring-0 resize-none italic  placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl 
+    p-6 pb-20 mb-3 text-md text-gray-800 border-none focus:ring-0 resize-none italic  placeholder:text-gray-400 bg-transparent outline-none leading-relaxed rounded-2xl  
     overflow-hidden"
               placeholder={currentPlaceholder}
               value={input}
